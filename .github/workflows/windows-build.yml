@@ -21,12 +21,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Install UI test dependencies
+        run: npm ci
       - name: Test UI with central HTTP server
         env:
           PYTHON: python
-        run: |
-          npm ci
-          npm run test:ui
+        run: npm run test:ui
       - name: Build bundled EXE
         run: python -m PyInstaller --noconfirm --clean --onefile --name DanjeongCheck --add-data "static;static" server.py
       - name: Verify actual EXE and restart
