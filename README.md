@@ -1,12 +1,139 @@
-# 단정체크 v4.1 시험 서버
+# 단정체크 중앙 서버 5.0.0
 
-v4.1.1의 UI와 기능을 그대로 제공하면서, 브라우저 localStorage 상태를 서버 SQLite DB에 동기화하는 시험 서버입니다.
+첨부 v4.1.1의 교표·보라색 화면·학생/교사/관리자 기능을 기준으로 만든 자체 서버판입니다.
+데이터는 브라우저 localStorage가 아니라 **Windows 미니 PC의 SQLite**에 저장됩니다.
+로그인 정보는 HttpOnly 쿠키와 서버 세션으로 관리합니다. 기본 시연 계정은 제공하지 않습니다.
 
-## 중요한 제한
-- 시험용 서버입니다.
-- 로그인/권한은 v4.1 시연판 구조를 사용합니다.
-- 실제 학생 개인정보 운영용이 아닙니다.
-- 여러 단말기에서 같은 상태 데이터를 확인하는지 검증하는 용도입니다.
+## 우리 집 서버 연결
 
-## Caddy
-handle_path /danjeong/* { reverse_proxy 127.0.0.1:8787 }
+- Windows 10 64비트 / Caddy
+- 주소: `https://presentoo.duckdns.org/danjeong/`
+- 앱: `127.0.0.1:8787` (기존 출석 8765와 분리)
+- 설치 위치: `C:\webserver\danjeong`
+- DB: `C:\webserver\danjeong\data\danjeong.sqlite3`
+
+기존 `C:\webserver\Caddyfile`의 `presentoo.duckdns.org { ... }` **안에** 한 줄을 추가합니다.
+
+```caddyfile
+reverse_proxy /danjeong/* 127.0.0.1:8787
+```
+
+기존 홈페이지 root, /admin/ 인증, /study/ 설정은 유지합니다.
+`handle_path`로 바꾸지 마세요. 앱이 /danjeong/ 경로 전체를 직접 처리합니다.
+
+```bat
+C:\webserver\caddy.exe reload --config C:\webserver\Caddyfile
+```
+
+8787 포트를 공유기에 추가로 개방하지 않습니다. Caddy의 기존 HTTPS 연결을 이용합니다.
+
+## GitHub 업로드와 EXE 만들기
+
+1. ZIP을 풀고 **안에 있는 파일과 폴더를 저장소 루트에** 업로드합니다.
+   루트에 `server.py`, `requirements.txt`, `static`, `.github`가 보여야 합니다.
+   ZIP 파일 자체만 올리면 빌드되지 않습니다.
+2. 기본 브랜치를 `main` 또는 `master`로 두세요.
+3. GitHub **Actions → Windows EXE and installer**가 자동으로 실행됩니다.
+   필요하면 **Run workflow**로 수동 실행합니다.
+4. 성공한 실행의 **Artifacts → DanjeongCheck-Windows-5.0.0**을 다운로드합니다.
+5. 산출물의 `installer-output/DanjeongCheck-Setup-5.0.0.exe`를 미니 PC에서 실행합니다.
+   최초 설치에 관리자 권한이 필요합니다.
+
+빌드는 실제 EXE를 실행해 초기 설정·로그인·프로세스 재시작 후 로그인 유지까지 확인합니다.
+이 ZIP 자체는 **소스와 자동 빌드 구성**입니다. Windows EXE는 GitHub Actions 성공 후 생성됩니다.
+Linux 개발 환경에서 Windows EXE 실행이나 미니 PC의 실제 OS 재부팅을 시험할 수는 없습니다.
+
+## 설치 프로그램 동작
+
+- 기본 설치 위치에 EXE와 관리 스크립트를 복사합니다.
+- `DanjeongCheck Server`라는 Windows 작업을 SYSTEM으로 등록하고 실행합니다.
+- 시작할 때 자동 실행, 실패 시 1분 후 재시작, **실행 시간 제한 없음**.
+- 기존 Caddy 및 정독실 작업은 수정하지 않습니다.
+- 설치 후에도 Caddyfile의 연결 한 줄은 직접 추가해야 합니다.
+
+수동 설치 시 `DanjeongCheck.exe`를 설치 폴더에 복사하고 관리자 PowerShell에서:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\webserver\danjeong\scripts\Install-Server.ps1
+```
+
+소스로 먼저 시험하려면 Python 3.10 이상 환경에서 `run_source.bat`를 실행하거나:
+
+```bat
+py -m pip install -r requirements.txt
+py server.py
+```
+
+## 최초 관리자 설정
+
+1. 서버 실행 후 `C:\webserver\danjeong\data\setup-code.txt`를 메모장으로 엽니다.
+2. `https://presentoo.duckdns.org/danjeong/`의 초기 설정 화면에서 그 코드를 입력합니다.
+3. 관리자 아이디·이름·비밀번호를 직접 정합니다. 비밀번호는 4~128자입니다.
+4. 설정이 끝나면 코드 파일이 삭제되고 관리자 로그인 화면으로 바뀝니다.
+
+설정 코드나 관리자 비밀번호를 GitHub·채팅에 올리지 마세요.
+시험 설치 후에는 학생·교사 계정을 등록해야 합니다.
+
+## 기능
+
+| 기능 | 동작 |
+|---|---|
+| 학생 | 본인 안내 목록·상세, 본인 교정 완료, 본인 비밀번호 변경 |
+| 교사 | 학번 검색·점검 등록, 전체 지도 조회, 본인이 등록한 기록 수정·삭제·이력 |
+| 관리자 | 학생·교사·관리자·점검 항목·복장 안내 추가/수정/삭제 |
+| 학생 학번 | 학년+반+두 자리 번호로 서버가 자동 생성 (1학년 1반 1번 → 1101) |
+| 학생 수정 | 기존 학번 유지; 이름·학년·반·번호·담임 수정, 비밀번호 빈칸이면 유지 |
+| 교사 Excel | 역할 teacher/admin 또는 교사/관리자, 담당 학년·반 등록 |
+| 학생 Excel | 학년·반·번호·이름·담임·초기비밀번호, 학번 자동 생성 |
+| 일괄 등록 | xlsx 및 UTF-8 CSV; 기존 아이디는 수정; 오류 행이 있으면 전체 취소 |
+| 동적 필터 | 등록된 학생 자료에서 학년·반을 생성 (고정된 1~5반 제한 없음) |
+| 지도 내역 | 날짜·학년·반·이름/학번 필터, 수정 전/후와 처리자·시각 이력 |
+| 보고서 | 기간별 일반 지도 및 반복 지도 (5/10/15회 또는 직접 입력), 실제 XLSX 다운로드 |
+| 비밀번호 초기화 | 관리자 전체 학생; 교사는 담당 학년·반 또는 담임 이름이 일치하는 학생만 |
+| 로그인 유지 | 선택 시 30일; 서버 재시작 후에도 유지; 암호 변경/초기화 시 기존 세션 해제 |
+| 전체 백업 | 서버 계정(암호 해시)·기록·이력·설정 JSON 다운로드 및 복원 |
+| v4.1.1 이관 | 기존 전체백업 JSON 파일을 관리자 백업 화면에서 복원 |
+| 학년도 초기화 | 현재 관리자만 유지; 확인 문구+현재 암호 확인; 실행 전 자동 백업 |
+
+Excel은 외부 CDN 없이 서버에서 처리합니다. 구형 `.xls`는 Excel에서 `.xlsx`로 저장해 업로드하세요.
+로그인은 15분 동안 8회 실패 시 제한됩니다.
+학생에게는 다른 학생이나 교직원의 개인정보·암호 해시가 전달되지 않습니다.
+동시 수정 충돌은 화면에 다시 조회하라는 메시지로 알려줍니다.
+
+## 백업과 자료 이전
+
+관리자 → 관리자 설정 → 백업·학년도 초기화에서 전체 백업 JSON을 다운로드합니다.
+복원과 학년도 초기화 직전에는 `data\backups`에 자동으로 전체 백업이 저장됩니다.
+복원 후 모든 로그인은 해제되며 **복원한 백업의 계정과 암호**로 다시 로그인해야 합니다.
+
+v4.1.1 시연판의 브라우저 자료는 자동 이전되지 않습니다.
+그 시연판에서 다운로드한 전체 백업 JSON을 새 서버의 복원 기능으로 가져오세요.
+SQLite WAL 모드이므로 실행 중인 `.sqlite3` 한 파일만 단순 복사하지 말고 웹 백업을 사용하세요.
+새 EXE로 업데이트할 때 **data 폴더는 삭제하거나 덮어쓰지 않습니다**.
+
+## 작동 확인
+
+- 설치 직후 외부 PC/휴대폰에서 주소 열기 → 최초 관리자 설정 → 로그인
+- 학생·교사 Excel 등록 → 다른 브라우저의 학생 로그인 → 자기 기록만 조회
+- 교사 점검 등록 → 학생 교정 완료 → 관리자 상태·이력 확인
+- 기간 보고서 XLSX 다운로드 및 백업 다운로드/복원
+- Windows 작업 스케줄러에서 `DanjeongCheck Server`가 실행 중인지 확인
+- 미니 PC 실제 재부팅 후 창 없이 접속되는지 확인
+
+`502 Bad Gateway`면 앱 작업과 `data\logs\server.log`를 확인하세요.
+로그에는 서버 오류를 기록하며 비밀번호나 요청 본문을 기록하지 않습니다.
+
+## 개발 검증
+
+```bat
+py -m unittest discover -s tests -p test_server.py -v
+node --check static\app.js
+npm ci
+npm run test:ui
+```
+
+테스트는 임시 DB를 사용하여 실제 운영 자료를 수정하지 않습니다.
+`tests/smoke_exe.py`는 Windows 빌드 후 산출 EXE를 직접 실행하는 검사입니다.
+권한·세션·기록·계정·Excel·복원·초기화 검증은 `tests/test_server.py`에 포함되어 있습니다.
+
+화면 자동 검사는 실제 app.js를 DOM 환경에서 실행하고 실제 HTTP 서버에 연결합니다. 화면 초기 설정·학생 수정·일괄 업로드·지도 수정·보고서·학생 교정 완료·암호 변경을 검증합니다. 실제 브라우저의 화면 렌더링 및 Windows OS 재부팅은 설치 후 확인 대상입니다.

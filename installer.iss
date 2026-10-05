@@ -1,17 +1,29 @@
 [Setup]
-AppId={{CDEB4F18-5489-4DB0-81B1-4B477F139A13}
-AppName=DanjeongCheck Test Server
-AppVersion=4.1.0
-DefaultDirName={autopf}\DanjeongCheckServer
-OutputDir=release
-OutputBaseFilename=DanjeongCheck_Server_Setup
+AppId={{A19CFBB0-8F01-4E2E-86C1-C7234C4BA5A7}
+AppName=DanjeongCheck Server
+AppVersion=5.0.0
+DefaultDirName=C:\webserver\danjeong
+DisableProgramGroupPage=yes
 PrivilegesRequired=admin
-Compression=lzma
+OutputDir=installer-output
+OutputBaseFilename=DanjeongCheck-Setup-5.0.0
+Compression=lzma2
+SolidCompression=yes
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+CloseApplications=yes
 [Files]
-Source: "release_app\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
-[Dirs]
-Name: "{commonappdata}\DanjeongCheck\data"
+Source: "dist\DanjeongCheck.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "scripts\*.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
+Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
 [Run]
-Filename: "{app}\install_autostart.cmd"; Flags: runhidden waituntilterminated
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\Install-Server.ps1"" -InstallDir ""{app}"""; Flags: runhidden waituntilterminated
 [UninstallRun]
-Filename: "{app}\stop_server.cmd"; Flags: runhidden waituntilterminated
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\Unregister-Server.ps1"""; Flags: runhidden waituntilterminated
+[Code]
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var ExitCode: Integer;
+begin
+  Result := '';
+  Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), '-NoProfile -Command "Stop-ScheduledTask -TaskName ''DanjeongCheck Server'' -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2"', '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
+end;

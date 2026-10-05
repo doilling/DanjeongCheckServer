@@ -1,6 +1,11 @@
+data/
+backups/
+logs/
+.venv/
+__pycache__/
+*.pyc
+build/
+dist/
+installer-output/
 node_modules/
-release/
-release_app/
-.env
-data/*.db
-*.log
+*.spec

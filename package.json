@@ -1,13 +1,1 @@
-{
-  "name": "danjeongcheck-test-server",
-  "version": "4.1.0",
-  "private": true,
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js"
-  },
-  "dependencies": {
-    "better-sqlite3": "^11.7.0",
-    "express": "^4.21.2"
-  }
-}
+{"name":"danjeong-check-server-tests","private":true,"version":"5.0.0","scripts":{"test:ui":"node tests/test_ui.cjs"},"devDependencies":{"jsdom":"26.1.0"}}
