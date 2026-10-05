@@ -1,4 +1,4 @@
-const express=require('express'),Database=require('better-sqlite3'),bcrypt=require('bcryptjs'),jwt=require('jsonwebtoken'),path=require('path'),fs=require('fs');
+const express=require('express'),Database=require('better-sqlite3'),bcrypt=require('bcryptjs'),jwt=require('jsonwebtoken'),path=require('path'),fs=require('fs'),XLSX=require('xlsx');
 const app=express(),PORT=Number(process.env.PORT||8787),SECRET=process.env.JWT_SECRET||'CHANGE_ME',DIR=process.env.DATA_DIR||path.join(__dirname,'data');
 fs.mkdirSync(DIR,{recursive:true});const db=new Database(path.join(DIR,'danjeongcheck.db'));db.pragma('journal_mode = WAL');
 db.exec(`CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,name TEXT NOT NULL,password TEXT NOT NULL,role TEXT NOT NULL,grade TEXT,class_no TEXT,number_no TEXT,homeroom TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
@@ -20,15 +20,39 @@ app.post('/api/login',(req,res)=>{const u=db.prepare('SELECT * FROM users WHERE 
 app.get('/api/students',auth,role('teacher','admin'),(req,res)=>{const q=String(req.query.q||'');const rows=db.prepare("SELECT id,name,grade,class_no,number_no,homeroom FROM users WHERE role='student' AND (id LIKE ? OR name LIKE ?) ORDER BY grade,class_no,number_no").all('%'+q+'%','%'+q+'%');res.json(rows.map(pub))});
 app.get('/api/items',auth,(req,res)=>res.json(db.prepare('SELECT * FROM items WHERE active=1 ORDER BY id').all()));
 app.post('/api/records',auth,role('teacher','admin'),(req,res)=>{const p=req.body,s=db.prepare("SELECT * FROM users WHERE id=? AND role='student'").get(p.studentId);if(!s)return res.status(400).json({message:'학생을 찾을 수 없습니다.'});const i=db.prepare('SELECT * FROM items WHERE id=?').get(p.itemId);if(!i)return res.status(400).json({message:'점검 항목을 찾을 수 없습니다.'});const x=db.prepare('INSERT INTO records(student_id,item_id,note,status,teacher_id,record_date) VALUES(?,?,?,?,?,?)').run(s.id,i.id,p.note||'',p.status||'pending',req.user.id,p.recordDate||new Date().toISOString().slice(0,10));log(req.user.id,'CREATE','record',x.lastInsertRowid,null,p);res.json({ok:true,id:x.lastInsertRowid})});
+app.get('/api/reports',auth,role('teacher','admin'),(req,res)=>{const {from='',to='',grade='',classNo='',q='',repeatOnly='',threshold='5'}=req.query;let rows=db.prepare(`SELECT r.*,s.name student_name,s.grade,s.class_no,s.number_no,s.homeroom,i.name item_name,t.name teacher_name FROM records r JOIN users s ON s.id=r.student_id JOIN items i ON i.id=r.item_id JOIN users t ON t.id=r.teacher_id WHERE (''=? OR r.record_date>=?) AND (''=? OR r.record_date<=?) AND (''=? OR s.grade=?) AND (''=? OR s.class_no=?) AND (''=? OR s.id LIKE ? OR s.name LIKE ?) ORDER BY r.record_date DESC`).all(from,from,to,to,grade,grade,classNo,classNo,q,'%'+q+'%','%'+q+'%');if(String(repeatOnly)==='true'){let m={};rows.forEach(x=>m[x.student_id]=(m[x.student_id]||0)+1);rows=Object.keys(m).filter(id=>m[id]>=Number(threshold)).map(id=>{let a=rows.filter(x=>x.student_id===id),x=a[0];return {...x,count:m[id]}})}res.json(rows)});
 
-app.get('/api/filters/grades-classes',auth,role('teacher','admin'),(req,res)=>{
-  const rows=db.prepare("SELECT DISTINCT grade,class_no FROM users WHERE role='student' AND grade IS NOT NULL AND grade!='' AND class_no IS NOT NULL AND class_no!='' ORDER BY CAST(grade AS INTEGER),CAST(class_no AS INTEGER)").all();
-  const grades=[...new Set(rows.map(x=>x.grade))];
-  const classes={};rows.forEach(x=>{(classes[x.grade]??=[]).push(x.class_no)});
-  res.json({grades,classes});
+function xlsxResponse(res,filename,rows,sheet){
+  const ws=XLSX.utils.json_to_sheet(rows);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,sheet);
+  const buf=XLSX.write(wb,{bookType:'xlsx',type:'buffer'});
+  res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition',`attachment; filename="${filename}"`);res.send(buf);
+}
+app.get('/api/admin/templates/students',auth,role('admin'),(req,res)=>xlsxResponse(res,'학생등록양식.xlsx',[{학년:'1',반:'1',번호:'1',이름:'김하늘',담임교사:'김은혜',초기비밀번호:'1234'}],'학생등록양식'));
+app.get('/api/admin/templates/teachers',auth,role('admin'),(req,res)=>xlsxResponse(res,'교사등록양식.xlsx',[{교사아이디:'t101',이름:'김은혜',역할:'teacher',담당학년:'1',담당반:'1',초기비밀번호:'1234'}],'교사등록양식'));
+app.post('/api/admin/import/students',auth,role('admin'),(req,res)=>{
+  const rows=Array.isArray(req.body.rows)?req.body.rows:[],result={created:0,updated:0,errors:[]};
+  const tx=db.transaction(()=>rows.forEach((r,index)=>{
+    const id=String(r['학번']||r.id||'').trim(),name=String(r['이름']||r.name||'').trim();
+    if(!id||!name){result.errors.push({row:index+2,message:'학번 또는 이름 누락'});return}
+    const old=db.prepare('SELECT * FROM users WHERE id=?').get(id);
+    const vals=[name,String(r['학년']||r.grade||''),String(r['반']||r.classNo||''),String(r['번호']||r.numberNo||''),String(r['담임교사']||r.homeroom||'')];
+    if(old){if(old.role!=='student'){result.errors.push({row:index+2,message:'이미 교사/관리자 아이디로 사용 중'});return}db.prepare('UPDATE users SET name=?,grade=?,class_no=?,number_no=?,homeroom=? WHERE id=?').run(...vals,id);result.updated++}
+    else{db.prepare('INSERT INTO users(id,name,password,role,grade,class_no,number_no,homeroom) VALUES(?,?,?,?,?,?,?,?)').run(id,vals[0],bcrypt.hashSync(String(r['초기비밀번호']||r.password||'1234'),10),'student',...vals.slice(1));result.created++}
+  }));tx();log(req.user.id,'IMPORT','students','',null,result);res.json(result);
+});
+app.post('/api/admin/import/teachers',auth,role('admin'),(req,res)=>{
+  const rows=Array.isArray(req.body.rows)?req.body.rows:[],result={created:0,updated:0,errors:[]};
+  const tx=db.transaction(()=>rows.forEach((r,index)=>{
+    const id=String(r['교사아이디']||r.id||'').trim(),name=String(r['이름']||r.name||'').trim(),roleName=String(r['역할']||r.role||'teacher').trim();
+    if(!id||!name){result.errors.push({row:index+2,message:'교사 아이디 또는 이름 누락'});return}
+    if(!['teacher','admin'].includes(roleName)){result.errors.push({row:index+2,message:'역할값 오류'});return}
+    const old=db.prepare('SELECT * FROM users WHERE id=?').get(id);
+    if(old){if(old.role==='student'){result.errors.push({row:index+2,message:'이미 학생 학번으로 사용 중'});return}db.prepare('UPDATE users SET name=?,role=?,grade=?,class_no=? WHERE id=?').run(name,roleName,String(r['담당학년']||''),String(r['담당반']||''),id);result.updated++}
+    else{db.prepare('INSERT INTO users(id,name,password,role,grade,class_no) VALUES(?,?,?,?,?,?)').run(id,name,bcrypt.hashSync(String(r['초기비밀번호']||r.password||'1234'),10),roleName,String(r['담당학년']||''),String(r['담당반']||''));result.created++}
+  }));tx();log(req.user.id,'IMPORT','teachers','',null,result);res.json(result);
 });
 
-app.get('/api/reports',auth,role('teacher','admin'),(req,res)=>{const {from='',to='',grade='',classNo='',q='',repeatOnly='',threshold='5'}=req.query;let rows=db.prepare(`SELECT r.*,s.name student_name,s.grade,s.class_no,s.number_no,s.homeroom,i.name item_name,t.name teacher_name FROM records r JOIN users s ON s.id=r.student_id JOIN items i ON i.id=r.item_id JOIN users t ON t.id=r.teacher_id WHERE (''=? OR r.record_date>=?) AND (''=? OR r.record_date<=?) AND (''=? OR s.grade=?) AND (''=? OR s.class_no=?) AND (''=? OR s.id LIKE ? OR s.name LIKE ?) ORDER BY r.record_date DESC`).all(from,from,to,to,grade,grade,classNo,classNo,q,'%'+q+'%','%'+q+'%');if(String(repeatOnly)==='true'){let m={};rows.forEach(x=>m[x.student_id]=(m[x.student_id]||0)+1);rows=Object.keys(m).filter(id=>m[id]>=Number(threshold)).map(id=>{let a=rows.filter(x=>x.student_id===id),x=a[0];return {...x,count:m[id]}})}res.json(rows)});
 app.get('/api/admin/backup',auth,role('admin'),(req,res)=>{const out={users:db.prepare('SELECT * FROM users').all(),items:db.prepare('SELECT * FROM items').all(),rules:db.prepare('SELECT * FROM rules').all(),records:db.prepare('SELECT * FROM records').all(),audit:db.prepare('SELECT * FROM audit_logs').all()};res.json(out)});
 app.post('/api/admin/year-reset',auth,role('admin'),(req,res)=>{db.transaction(()=>{db.prepare("DELETE FROM records").run();db.prepare("DELETE FROM users WHERE role!='admin'").run();db.prepare('DELETE FROM audit_logs').run()})();log(req.user.id,'YEAR_RESET','system','',null,null);res.json({ok:true})});
 

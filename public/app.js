@@ -1,7 +1,7 @@
 (function(){
 var app=document.getElementById('app'),KEY='danjeong-v26';
 var D=JSON.parse(localStorage.getItem(KEY)||'null')||{users:[{id:'1101',pw:'1234',name:'김하늘',role:'student',g:'1',c:'1',n:'1',home:'김은혜'},{id:'1102',pw:'1234',name:'박서연',role:'student',g:'1',c:'1',n:'2',home:'김은혜'},{id:'t100',pw:'1234',name:'이수연',role:'teacher'},{id:'admin',pw:'1234',name:'관리자',role:'admin'}],items:['명찰 미착용','실내화 미착용','교복 상의 규정 미준수'],records:[{id:1,sid:'1101',item:'명찰 미착용',note:'다음 등교일부터 명찰을 착용해 주세요.',status:'pending',teacher:'이수연',date:'2026-09-28'}],audit:[],reset:[]},S=JSON.parse(localStorage.getItem(KEY+'-session')||'null');
-if(!D.reset)D.reset=[];if(!D.defaultStudentPw)D.defaultStudentPw='1234';if(!D.users.some(function(x){return x.id==='t101'})){D.users.push({id:'t101',pw:'1234',name:'김은혜',role:'teacher'});save()};if(!D.rules)D.rules=['학교 지정 교복과 명찰을 단정하게 착용합니다.','교내에서는 지정 실내화를 착용합니다.'];
+if(!D.reset)D.reset=[];if(!D.defaultStudentPw)D.defaultStudentPw='1234';if(!D.rules)D.rules=['학교 지정 교복과 명찰을 단정하게 착용합니다.','교내에서는 지정 실내화를 착용합니다.'];
 function save(){localStorage.setItem(KEY,JSON.stringify(D))}function q(s){return document.querySelector(s)}function e(x){return String(x||'').replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}function user(id){return D.users.find(function(x){return x.id===id})}function toast(x){var d=document.createElement('div');d.className='toast';d.textContent=x;document.body.appendChild(d);setTimeout(function(){d.remove()},2200)}function tag(s){return '<span class="tag '+s+'">'+(s==='done'?'완료':s==='review'?'재점검 필요':'확인 필요')+'</span>'}
 function loadXlsx(done){
   if(window.XLSX){done();return}
@@ -43,19 +43,6 @@ function head(t,p,a){return '<header class="head"><div><h2>'+t+'</h2><p>'+p+'</p
 function student(){var r=D.records.filter(function(x){return x.sid===S.id});shell('home',head('안녕하세요, '+e(S.name)+' 학생','복장 안내를 확인해 주세요.')+'<div class="grid three"><section class="card metric"><small>전체 안내</small><b>'+r.length+'</b></section><section class="card metric"><small>처리 중</small><b>'+r.filter(function(x){return x.status!=='done'}).length+'</b></section><section class="card metric"><small>완료</small><b>'+r.filter(function(x){return x.status==='done'}).length+'</b></section></div>')}
 function teacher(){shell('home',head(S.name+' 선생님','학생 학번을 검색하여 지도 내역을 등록합니다.','<button id="go" class="btn primary">+ 점검 등록</button>')+'<section class="card"><h3>빠른 안내</h3><p>학번 검색 후 점검 항목과 안내 내용을 등록할 수 있습니다.</p></section>');q('#go').onclick=function(){render('check')}}
 function check(){shell('check',head('복장 점검 등록','같은 학생을 반복 검색할 수 있습니다.')+'<section class="card"><label>학번 검색</label><div class="search"><input id="sidInput" placeholder="예: 1101"><button id="find" type="button" class="btn soft">검색</button></div><div id="found" class="found">학생을 검색해 주세요.</div><form id="form" style="display:none"><input type="hidden" id="sid"><label>점검 항목</label><select id="item">'+D.items.map(function(x){return '<option>'+e(x)+'</option>'}).join('')+'</select><label>안내 내용</label><textarea id="note">다음 등교일부터 복장 규정을 확인해 주세요.</textarea><button class="btn primary" style="margin-top:12px">등록</button></form></section>');var find=function(){var x=user(q('#sidInput').value.trim());q('#form').style.display='none';if(!x||x.role!=='student'){q('#found').textContent='등록되지 않은 학번입니다.';return}q('#found').innerHTML='<b>'+x.id+' · '+e(x.name)+'</b><br><small>'+x.g+'학년 '+x.c+'반 '+x.n+'번 · 담임 '+e(x.home)+'</small>';q('#sid').value=x.id;q('#form').style.display='block'};q('#find').onclick=find;q('#sidInput').onkeydown=function(ev){if(ev.key==='Enter'){ev.preventDefault();find()}};q('#form').onsubmit=function(ev){ev.preventDefault();D.records.push({id:Date.now(),sid:q('#sid').value,item:q('#item').value,note:q('#note').value,status:'pending',teacher:S.name,date:new Date().toISOString().slice(0,10)});save();toast('지도 내역을 등록했습니다.');render('records')}}
-function populateGradeClassFilters(){
-  var fg=q('#fg'),fc=q('#fc');if(!fg||!fc)return;
-  var students=D.users.filter(function(x){return x.role==='student'});
-  var grades=Array.from(new Set(students.map(function(x){return String(x.g||'')}).filter(Boolean))).sort(function(a,b){return Number(a)-Number(b)});
-  function fillClasses(){
-    var selected=fg.value;
-    var classes=Array.from(new Set(students.filter(function(x){return !selected||String(x.g)===selected}).map(function(x){return String(x.c||'')}).filter(Boolean))).sort(function(a,b){return Number(a)-Number(b)});
-    fc.innerHTML='<option value="">전체</option>'+classes.map(function(x){return '<option value="'+e(x)+'">'+e(x)+'반</option>'}).join('');
-  }
-  fg.innerHTML='<option value="">전체</option>'+grades.map(function(x){return '<option value="'+e(x)+'">'+e(x)+'학년</option>'}).join('');
-  fg.onchange=fillClasses;fillClasses();
-}
-
 function filterStudentRecords(list){
   var g=q('#fg')?q('#fg').value:'',c=q('#fc')?q('#fc').value:'',term=(q('#fstudent')?q('#fstudent').value:'').trim();
   return list.filter(function(x){var st=user(x.sid);return (!g||(st&&st.g===g))&&(!c||(st&&st.c===c))&&(!term||(st&&((st.id||'').indexOf(term)>=0||(st.name||'').indexOf(term)>=0)))});
@@ -144,7 +131,6 @@ function report(){
   var today=new Date().toISOString().slice(0,10);
   shell('report',head('기간별 지도 결과','학년·학반·학생 조건과 기간을 설정해 일반 또는 반복 지도 결과만 조회합니다.')+
   '<section class="card"><div class="grid two"><div><label>학년</label><select id="fg"><option value="">전체</option><option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option></select></div><div><label>학반</label><select id="fc"><option value="">전체</option><option value="1">1반</option><option value="2">2반</option><option value="3">3반</option><option value="4">4반</option><option value="5">5반</option></select></div><div><label>학생 검색</label><input id="fstudent" placeholder="이름 또는 학번"></div><div><label>시작일</label><input id="rf" type="date" value="'+today+'"></div><div><label>종료일</label><input id="rt" type="date" value="'+today+'"></div></div><label style="margin-top:16px"><input id="repeatOnly" type="checkbox" style="width:auto"> 반복 지도 학생만 보기</label><div id="thresholdBox" style="display:none"><div class="grid two"><div><label>기준 횟수</label><select id="threshold"><option value="5">5회 이상</option><option value="10">10회 이상</option><option value="15">15회 이상</option></select></div><div><label>직접 입력</label><input id="customThreshold" type="number" min="1" placeholder="예: 7"></div></div></div><button id="rview" class="btn soft" style="margin-top:12px">조회</button> <button id="rexcel" class="btn primary">Excel 다운로드</button><div id="rsummary" class="hint" style="margin-top:14px"></div><div id="rrows" style="margin-top:12px"></div></section>');
-  populateGradeClassFilters();
   var result=[],repeatRows=[],modeRepeat=false;
   function query(){
     var f=q('#rf').value,t=q('#rt').value;modeRepeat=q('#repeatOnly').checked;
