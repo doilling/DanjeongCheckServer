@@ -154,7 +154,7 @@ def create_app(data_dir=None):
         if path.startswith('api/'): raise Problem('페이지를 찾을 수 없습니다.',404)
         return send_from_directory(ROOT/'static',path)
     @app.get(PREFIX+'/api/health')
-    def health(): return jsonify(ok=True,version='5.0.2')
+    def health(): return jsonify(ok=True,version='5.0.3')
     @app.get(PREFIX+'/api/session')
     def session():
         with db() as conn: initialized=bool(conn.execute('SELECT 1 FROM users').fetchone())
@@ -272,8 +272,9 @@ def create_app(data_dir=None):
     @auth('admin','teacher')
     def reset_password(uid):
         with db() as conn:
-            row=conn.execute("SELECT * FROM users WHERE id=? AND role='student'",(uid,)).fetchone()
-            if not row: raise Problem('학생을 찾을 수 없습니다.',404)
+            row=conn.execute("SELECT * FROM users WHERE id=? AND role IN ('student','teacher')",(uid,)).fetchone()
+            if not row: raise Problem('학생 또는 교사 계정을 찾을 수 없습니다.',404)
+            if g.user['role']=='teacher' and row['role']!='student': raise Problem('교사 계정의 비밀번호는 관리자만 초기화할 수 있습니다.',403)
             if g.user['role']=='teacher' and not ((g.user['g'] and g.user['c'] and row['g']==g.user['g'] and row['c']==g.user['c']) or row['home']==g.user['name']): raise Problem('담당 학반 또는 담임 학생만 초기화할 수 있습니다.',403)
             conn.execute('UPDATE users SET password_hash=? WHERE id=?',(generate_password_hash(settings(conn)['defaultStudentPw']),uid));conn.execute('DELETE FROM sessions WHERE uid=?',(uid,))
             conn.execute('INSERT INTO resets(sid,name,processor,date) VALUES(?,?,?,?)',(uid,row['name'],g.user['name'],stamp()));audit(conn,'password_reset',after={'sid':uid})
@@ -515,7 +516,7 @@ def create_app(data_dir=None):
         d=body()
         with db() as conn:
             row=conn.execute('SELECT * FROM users WHERE id=?',(g.user['id'],)).fetchone()
-            if d.get('confirm')!='학년도 초기화' or not isinstance(d.get('password'),str) or not check_password_hash(row['password_hash'],d['password']): raise Problem('확인 문구와 관리자 비밀번호를 확인하세요.',403)
+            if not isinstance(d.get('password'),str) or not check_password_hash(row['password_hash'],d['password']): raise Problem('현재 관리자 비밀번호를 확인하세요.',403)
             automatic_backup(conn,'before-year-reset')
             for table in ('records','audit','resets','items','rules'): conn.execute('DELETE FROM '+table)
             conn.execute('DELETE FROM users WHERE id<>?',(g.user['id'],))

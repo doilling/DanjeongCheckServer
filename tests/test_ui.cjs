@@ -25,6 +25,7 @@ async function main(){
  click('[data-edit="1101"]');fill('#f_name','김하늘수정');submit('#entityForm');await wait(()=>!$('.modalbg')&&doc.body.textContent.includes('김하늘수정'),'student edit');
  click('#importExcel');await wait(()=>$('#excelFile'),'import modal');Object.defineProperty($('#excelFile'),'files',{value:[new dom.window.File(['학년,반,번호,이름,담임교사,초기비밀번호\n2,7,10,일괄학생,담임,1234'], 'students.csv',{type:'text/csv'})]});click('#uploadExcel');await wait(()=>doc.body.textContent.includes('일괄학생'),'UI upload persisted');click('[data-close]');
  click('[data-tab="teachers"]');click('#add');fill('#f_id','t1');fill('#f_name','담임');fill('#f_password','1234');submit('#entityForm');await wait(()=>!$('.modalbg')&&doc.body.textContent.includes('t1'),'teacher save');
+ click('[data-edit="t1"]');assert($('#resetPw'),'teacher reset button');click('#resetPw');await wait(()=>doc.body.textContent.includes('학교 기본 비밀번호로 초기화했습니다.'),'teacher reset');click('[data-close]');
  click('[data-tab="items"]');click('#add');fill('#f_value','새 점검');submit('#entityForm');await wait(()=>!$('.modalbg')&&doc.body.textContent.includes('새 점검'),'item save');
  await nav('check');fill('#sidInput','1101');click('#find');await wait(()=>!$('#checkForm').hidden,'student search');fill('#note','UI 통합 테스트 안내');submit('#checkForm');await wait(()=>$('.nav button.on')?.dataset.page==='records'&&$('[data-record]'),'checkin record');click('[data-record]');await wait(()=>$('#editNote'),'record modal');fill('#editNote','수정된 안내');
  click('#saveRecord');await wait(()=>!$('.modalbg')&&doc.body.textContent.includes('수정된 안내'),'record edit');
@@ -32,6 +33,7 @@ async function main(){
  await nav('manage');click('[data-tab="backup"]');assert($('a[href$="backup"]'),'backup link');assert($('#restore'),'restore button');
  click('#logout');await login('1101','1234');assert(!$('.nav [data-page="manage"]'));await nav('records');click('[data-record]');await wait(()=>$('#completeRecord'),'student detail');click('#completeRecord');await wait(()=>!$('.modalbg')&&doc.body.textContent.includes('완료'),'student complete');
  await nav('password');fill('#oldpw','1234');fill('#newpw','newpass');fill('#newpw2','newpass');submit('#passwordForm');await wait(()=>$('#login'),'password change logged out');await login('1101','newpass');
+ click('#logout');await login('admin','adminpw');await nav('manage');click('[data-tab="backup"]');assert(!$('#confirmYear'),'no confirmation text field');fill('#yearPassword','adminpw');submit('#resetYear');await wait(()=>!!$('#add')&&!$('.main').textContent.includes('김하늘수정'),'password-only year reset');
  assert.equal(errors.length,0,errors.join('; '));console.log('UI DOM + HTTP flow passed: setup, account CRUD, item, record edit, report, repeat, backup controls, student completion, password');
 }
 main().catch(e=>{console.error(e);process.exitCode=1;}).finally(async()=>{if(dom)dom.window.close();processServer.kill();await delay(500);fs.rmSync(dir,{recursive:true,force:true});});

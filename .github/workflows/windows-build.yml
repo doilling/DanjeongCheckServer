@@ -43,10 +43,10 @@ jobs:
       - name: Publish Windows files
         uses: actions/upload-artifact@v4
         with:
-          name: DanjeongCheck-Windows-5.0.2
+          name: DanjeongCheck-Windows-5.0.3
           path: |
             dist/DanjeongCheck.exe
-            installer-output/DanjeongCheck-Setup-5.0.2.exe
+            installer-output/DanjeongCheck-Setup-5.0.3.exe
             scripts/*.ps1
             README.md
           if-no-files-found: error

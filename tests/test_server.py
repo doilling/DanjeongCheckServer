@@ -73,6 +73,15 @@ class ServerTests(unittest.TestCase):
   one=self.client('1101');two=self.client('1101');self.assertEqual(self.call(one,'password',{'old':'wrong','new':'newpass'}).status_code,403)
   self.assertEqual(self.call(one,'password',{'old':'1234','new':'newpass'}).status_code,200)
   self.assertEqual(self.call(two,'state').status_code,401);self.login(one,'1101','newpass')
+ def test_admin_can_reset_teacher_but_teacher_cannot(self):
+  teacher=self.client('t1');other=self.client('t2')
+  self.assertEqual(self.call(teacher,'users/t2/reset',{}).status_code,403)
+  self.assertEqual(self.call(self.admin,'password',{'old':'adminpw','new':'adminpw','defaultStudentPw':'schoolpw'}).status_code,200)
+  self.login(self.admin,'admin','adminpw')
+  self.assertEqual(self.call(self.admin,'users/t2/reset',{}).status_code,200)
+  self.assertEqual(self.call(other,'state').status_code,401)
+  self.login(other,'t2','schoolpw')
+  self.assertEqual(self.call(self.admin,'state').json['resets'][0]['sid'],'t2')
  def test_remember_session_survives_server_restart(self):
   c=self.app.test_client();r=self.login(c,'1101',remember=True);self.assertIn('Max-Age=34560000',r.headers['Set-Cookie']);self.assertIn('HttpOnly',r.headers['Set-Cookie'])
   token=c.get_cookie('danjeong_session',path='/danjeong/').value
@@ -149,8 +158,8 @@ class ServerTests(unittest.TestCase):
   legacy={'users':[{'id':'boss','name':'관리자','role':'admin','pw':'abcd'},{'id':'1101','name':'학생','role':'student','pw':'1234','g':'1','c':'1','n':'1'}],'items':['명찰'],'records':[{'id':10,'sid':'1101','item':'명찰','note':'안내','status':'pending','teacher':'선생님','date':'2026-10-01'}],'defaultStudentPw':'1234'}
   self.assertEqual(self.upload('restore',json.dumps(legacy).encode(),'legacy.json').status_code,200);self.login(self.admin,'boss','abcd')
   self.assertEqual(len(self.call(self.admin,'state').json['records']),1)
-  self.assertEqual(self.call(self.admin,'year-reset',{'confirm':'학년도 초기화','password':'wrong'}).status_code,403)
-  self.assertEqual(self.call(self.admin,'year-reset',{'confirm':'학년도 초기화','password':'abcd'}).status_code,200)
+  self.assertEqual(self.call(self.admin,'year-reset',{'password':'wrong'}).status_code,403)
+  self.assertEqual(self.call(self.admin,'year-reset',{'password':'abcd'}).status_code,200)
   data=self.call(self.admin,'state').json;self.assertEqual([u['id'] for u in data['users']],['boss']);self.assertEqual(data['records'],[])
 
 if __name__=='__main__':unittest.main()
