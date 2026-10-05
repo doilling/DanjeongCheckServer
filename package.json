@@ -1,1 +1,1 @@
-{"name":"danjeong-check-server-tests","private":true,"version":"5.0.0","scripts":{"test:ui":"node tests/test_ui.cjs"},"devDependencies":{"jsdom":"26.1.0"}}
+{"name":"danjeong-check-server-tests","private":true,"version":"5.0.2","scripts":{"test:ui":"node tests/test_ui.cjs"},"devDependencies":{"jsdom":"26.1.0"}}

@@ -1,5 +1,5 @@
 """Windows CI: launch the actual EXE, bootstrap, login, restart, restore session."""
-import http.cookiejar,json,os,pathlib,subprocess,sys,tempfile,time,urllib.request
+import http.cookiejar,json,os,pathlib,subprocess,sys,tempfile,time,urllib.request,urllib.error
 
 def stop(process):
  if os.name=='nt':
@@ -34,9 +34,24 @@ def main():
    call('setup',{'code':code,'id':'admin','name':'관리자','password':'testpw'})
    call('login',{'id':'admin','password':'testpw','remember':True})
    assert call('session')['user']['role']=='admin'
+   # Use real Waitress, not Flask's test client: Caddy forwards HTTPS over localhost HTTP.
+   forwarded={'Host':'presentoo.duckdns.org','Origin':'https://presentoo.duckdns.org',
+              'X-Forwarded-Host':'presentoo.duckdns.org','X-Forwarded-Proto':'https',
+              'X-Forwarded-For':'203.0.113.10','Content-Type':'application/json'}
+   payload=json.dumps({'id':'admin','password':'testpw'}).encode()
+   req=urllib.request.Request(url+'/danjeong/api/login',headers=forwarded,data=payload)
+   with urllib.request.urlopen(req,timeout=5) as response:
+    assert json.load(response)['user']['id']=='admin'
+    assert 'Secure' in response.headers['Set-Cookie']
+   forwarded['Origin']='https://untrusted.example'
+   try:
+    urllib.request.urlopen(urllib.request.Request(url+'/danjeong/api/login',headers=forwarded,data=payload),timeout=5)
+    raise AssertionError('Foreign origin should be rejected')
+   except urllib.error.HTTPError as error:
+    assert error.code==403
   finally:stop(p)
   p=launch()
   try:assert call('session')['user']['id']=='admin'
   finally:stop(p)
- print(('Source server' if exe.suffix=='.py' else 'Bundled EXE')+' start, setup, login and process restart checks passed')
+ print(('Source server' if exe.suffix=='.py' else 'Bundled EXE')+' start, HTTPS proxy login, origin rejection and process restart checks passed')
 if __name__=='__main__':main()

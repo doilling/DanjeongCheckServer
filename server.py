@@ -109,17 +109,25 @@ def create_app(data_dir=None):
         return decorate
     @app.before_request
     def protect():
-        g.user=None;g.csrf=None
+        g.user=None;g.csrf=None;g.persistent=False
         if request.method not in ('GET','HEAD','OPTIONS'):
             origin=request.headers.get('Origin')
             if origin != request.host_url.rstrip('/'): raise Problem('요청 출처가 올바르지 않습니다.',403)
         token=request.cookies.get('danjeong_session','')
         if token:
             with db() as conn:
-                row=conn.execute('SELECT s.csrf,u.* FROM sessions s JOIN users u ON u.id=s.uid WHERE s.token_hash=? AND s.expires>?',(token_hash(token),time.time())).fetchone()
-            if row: g.user=public_user(row);g.csrf=row['csrf']
+                row=conn.execute('SELECT s.csrf,s.expires,u.* FROM sessions s JOIN users u ON u.id=s.uid WHERE s.token_hash=? AND (s.expires=0 OR s.expires>?)',(token_hash(token),time.time())).fetchone()
+            if row: g.user=public_user(row);g.csrf=row['csrf'];g.persistent=row['expires']==0
     @app.after_request
     def headers(response):
+        # Browsers bound cookie lifetimes; refresh the cookie on use while the
+        # server session itself has no time limit. Revoked sessions stay revoked.
+        if getattr(g,'persistent',False) and 'Set-Cookie' not in response.headers:
+            token=request.cookies.get('danjeong_session','')
+            with db() as conn:
+                live=conn.execute('SELECT 1 FROM sessions WHERE token_hash=?',(token_hash(token),)).fetchone()
+            if live:
+                response.set_cookie('danjeong_session',token,httponly=True,secure=request.is_secure,samesite='Strict',path=PREFIX+'/',max_age=400*86400)
         response.headers.update({'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'same-origin','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"})
         return response
     @app.errorhandler(Problem)
@@ -146,7 +154,7 @@ def create_app(data_dir=None):
         if path.startswith('api/'): raise Problem('페이지를 찾을 수 없습니다.',404)
         return send_from_directory(ROOT/'static',path)
     @app.get(PREFIX+'/api/health')
-    def health(): return jsonify(ok=True,version='5.0.0')
+    def health(): return jsonify(ok=True,version='5.0.2')
     @app.get(PREFIX+'/api/session')
     def session():
         with db() as conn: initialized=bool(conn.execute('SELECT 1 FROM users').fetchone())
@@ -177,12 +185,12 @@ def create_app(data_dir=None):
                 current=time.time()
                 conn.execute('INSERT INTO login_attempts VALUES(?,1,?) ON CONFLICT(identity) DO UPDATE SET count=CASE WHEN login_attempts.expires>? THEN login_attempts.count+1 ELSE 1 END,expires=excluded.expires',(identity,current+900,current))
             raise Problem('아이디 또는 비밀번호를 확인하세요.',401)
-        token=secrets.token_urlsafe(32);csrf=secrets.token_urlsafe(24);remember=d.get('remember') is True;duration=30*86400 if remember else 8*3600
+        token=secrets.token_urlsafe(32);csrf=secrets.token_urlsafe(24);remember=d.get('remember') is True
         with db() as conn:
-            conn.execute('DELETE FROM login_attempts WHERE identity=?',(identity,));conn.execute('DELETE FROM sessions WHERE expires<?',(time.time(),))
-            conn.execute('INSERT INTO sessions VALUES(?,?,?,?)',(token_hash(token),uid,csrf,time.time()+duration))
+            conn.execute('DELETE FROM login_attempts WHERE identity=?',(identity,));conn.execute('DELETE FROM sessions WHERE expires>0 AND expires<?',(time.time(),))
+            conn.execute('INSERT INTO sessions VALUES(?,?,?,?)',(token_hash(token),uid,csrf,0 if remember else time.time()+8*3600))
         response=jsonify(user=public_user(row),csrf=csrf)
-        response.set_cookie('danjeong_session',token,httponly=True,secure=request.is_secure,samesite='Strict',path=PREFIX+'/',max_age=duration if remember else None)
+        response.set_cookie('danjeong_session',token,httponly=True,secure=request.is_secure,samesite='Strict',path=PREFIX+'/',max_age=400*86400 if remember else None)
         return response
     @app.post(PREFIX+'/api/logout')
     @auth()
@@ -526,6 +534,9 @@ def main():
     if setup.exists(): print('Initial setup code file:',setup,flush=True)
     print(f'DanjeongCheck running on http://127.0.0.1:{args.port}/danjeong/',flush=True)
     from waitress import serve
-    serve(app,host='127.0.0.1',port=args.port,threads=8,max_request_body_size=12*1024*1024)
+    serve(app,host='127.0.0.1',port=args.port,threads=8,
+          trusted_proxy='127.0.0.1',trusted_proxy_count=1,
+          trusted_proxy_headers={'x-forwarded-for','x-forwarded-proto','x-forwarded-host'},
+          max_request_body_size=12*1024*1024)
 
 if __name__=='__main__': main()

@@ -1,4 +1,6 @@
 import io,json,sys,tempfile,unittest
+from unittest.mock import patch
+import time
 from pathlib import Path
 from openpyxl import Workbook,load_workbook
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
@@ -72,7 +74,7 @@ class ServerTests(unittest.TestCase):
   self.assertEqual(self.call(one,'password',{'old':'1234','new':'newpass'}).status_code,200)
   self.assertEqual(self.call(two,'state').status_code,401);self.login(one,'1101','newpass')
  def test_remember_session_survives_server_restart(self):
-  c=self.app.test_client();r=self.login(c,'1101',remember=True);self.assertIn('Max-Age=2592000',r.headers['Set-Cookie']);self.assertIn('HttpOnly',r.headers['Set-Cookie'])
+  c=self.app.test_client();r=self.login(c,'1101',remember=True);self.assertIn('Max-Age=34560000',r.headers['Set-Cookie']);self.assertIn('HttpOnly',r.headers['Set-Cookie'])
   token=c.get_cookie('danjeong_session',path='/danjeong/').value
   app=create_app(self.tmp.name);new=app.test_client();new.set_cookie('danjeong_session',token,path='/danjeong/')
   self.assertEqual(new.get('/danjeong/api/session').json['user']['id'],'1101')
@@ -83,6 +85,17 @@ class ServerTests(unittest.TestCase):
   with self.app.db() as db: db.execute('DELETE FROM login_attempts')
   r=c.post('/danjeong/api/login',json={'id':'1101','password':'1234'},headers={'Origin':'https://localhost','X-Forwarded-Proto':'https'})
   self.assertEqual(r.status_code,200,r.json);self.assertIn('Secure',r.headers['Set-Cookie'])
+ def test_persistent_session_has_no_server_deadline_and_logout_revokes(self):
+  c=self.app.test_client();self.login(c,'1101',remember=True)
+  with self.app.db() as db:
+   self.assertEqual(db.execute("SELECT expires FROM sessions WHERE uid='1101'").fetchone()[0],0)
+  with patch('server.time.time',return_value=time.time()+500*86400):
+   result=self.call(c,'state');self.assertEqual(result.status_code,200)
+   self.assertIn('Max-Age=34560000',result.headers['Set-Cookie'])
+   another=self.app.test_client();self.login(another,'t1')
+   self.assertEqual(self.call(c,'state').status_code,200)
+   self.assertEqual(self.call(c,'logout',{}).status_code,200)
+   self.assertEqual(self.call(c,'state').status_code,401)
  def test_xlsx_atomic_import_and_real_export(self):
   raw=self.workbook([['학년','반','번호','이름','초기비밀번호'],[2,3,1,'새학생','abcd'],[2,3,2,'','abcd']])
   r=self.upload('import/students',raw,'students.xlsx');self.assertEqual(r.status_code,400);self.assertFalse(any(u['id']=='2301' for u in self.call(self.admin,'state').json['users']))
