@@ -1,4 +1,4 @@
-name: Build DanjeongCheck v4.2 Test Server Setup
+name: Build DanjeongCheck Test Server Setup
 on: { workflow_dispatch: {} }
 jobs:
   build:
@@ -21,5 +21,5 @@ jobs:
         run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss'
       - uses: actions/upload-artifact@v4
         with:
-          name: DanjeongCheck-v4.2-TestServer-Setup
+          name: DanjeongCheck-TestServer-Setup
           path: release/DanjeongCheck_Server_Setup.exe
