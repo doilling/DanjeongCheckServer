@@ -1,13 +1,12 @@
-# DanjeongCheck Server Final API
+# 단정체크 v4.1 시험 서버
 
-서버형 단정체크 프로젝트입니다.
-- 최초 접속 시 관리자 계정 생성
-- 학생/교사/관리자 서버 로그인
-- 학생 안내/교정 완료
-- 점검 등록
-- 학생/교사 Excel 업로드
-- 동적 학년/반 API
-- 기간/반복 보고서
-- Windows EXE 빌드 GitHub Actions
+v4.1.1의 UI와 기능을 그대로 제공하면서, 브라우저 localStorage 상태를 서버 SQLite DB에 동기화하는 시험 서버입니다.
 
-Caddy: handle_path /danjeong/* { reverse_proxy 127.0.0.1:8787 }
+## 중요한 제한
+- 시험용 서버입니다.
+- 로그인/권한은 v4.1 시연판 구조를 사용합니다.
+- 실제 학생 개인정보 운영용이 아닙니다.
+- 여러 단말기에서 같은 상태 데이터를 확인하는지 검증하는 용도입니다.
+
+## Caddy
+handle_path /danjeong/* { reverse_proxy 127.0.0.1:8787 }

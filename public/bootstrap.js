@@ -1,0 +1,1 @@
+(function(){try{var x=new XMLHttpRequest();x.open('GET','api/state',false);x.send(null);if(x.status===200&&x.responseText){localStorage.setItem('danjeong-v26',x.responseText)}}catch(e){console.warn('state bootstrap failed',e)}}());

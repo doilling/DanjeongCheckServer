@@ -1,7 +1,7 @@
 [Setup]
-AppId={{B4E38F45-6BB2-4DF1-8D2B-78649D4A6F8E}
-AppName=DanjeongCheck Server
-AppVersion=1.0.0
+AppId={{CDEB4F18-5489-4DB0-81B1-4B477F139A13}
+AppName=DanjeongCheck Test Server
+AppVersion=4.1.0
 DefaultDirName={autopf}\DanjeongCheckServer
 OutputDir=release
 OutputBaseFilename=DanjeongCheck_Server_Setup

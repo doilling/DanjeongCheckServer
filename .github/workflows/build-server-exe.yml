@@ -1,4 +1,4 @@
-name: Build DanjeongCheck Server Setup
+name: Build DanjeongCheck Test Server Setup
 on: { workflow_dispatch: {} }
 jobs:
   build:
@@ -11,7 +11,7 @@ jobs:
       - shell: powershell
         run: |
           New-Item -ItemType Directory -Force release_app | Out-Null
-          Copy-Item server.js,run_server.cmd,install_autostart.cmd,stop_server.cmd release_app
+          Copy-Item server.js,seed.json,run_server.cmd,install_autostart.cmd,stop_server.cmd release_app
           Copy-Item -Recurse public (Join-Path release_app "public")
           Copy-Item -Recurse node_modules (Join-Path release_app "node_modules")
           Copy-Item (node -p "process.execPath") (Join-Path release_app "node.exe")
@@ -21,5 +21,5 @@ jobs:
         run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss'
       - uses: actions/upload-artifact@v4
         with:
-          name: DanjeongCheck-Server-Setup
+          name: DanjeongCheck-TestServer-Setup
           path: release/DanjeongCheck_Server_Setup.exe
