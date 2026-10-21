@@ -1,12 +1,12 @@
 [Setup]
 AppId={{A19CFBB0-8F01-4E2E-86C1-C7234C4BA5A7}
 AppName=DanjeongCheck Server
-AppVersion=5.0.3
+AppVersion=5.0.5
 DefaultDirName=C:\webserver\danjeong
 DisableProgramGroupPage=yes
 PrivilegesRequired=admin
 OutputDir=installer-output
-OutputBaseFilename=DanjeongCheck-Setup-5.0.3
+OutputBaseFilename=DanjeongCheck-Setup-5.0.5
 Compression=lzma2
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible
