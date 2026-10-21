@@ -404,7 +404,7 @@ def create_app(data_dir=None):
     @app.post(PREFIX+'/api/import/<kind>')
     @auth('admin')
     def import_users(kind):
-        if kind not in ('students','teachers'): raise Problem('업로드 종류를 확인하세요.')
+        if kind not in ('students','teachers','records'): raise Problem('업로드 종류를 확인하세요.')
         f=request.files.get('file')
         if not f: raise Problem('Excel 파일을 선택하세요.')
         if not f.filename.lower().endswith(('.xlsx','.csv')): raise Problem('xlsx 또는 UTF-8 CSV 파일을 선택하세요. 구형 xls는 xlsx로 저장하세요.')
@@ -429,7 +429,22 @@ def create_app(data_dir=None):
                 if not any(x is not None and str(x).strip() for x in row): continue
                 d=dict(zip(headings,[str(x) if x is not None else '' for x in row]))
                 try:
-                    if kind=='students':
+                    if kind=='records':
+                        sid=student_id(d.get('학년',''),d.get('반',''),d.get('번호',''))
+                        date=valid_date(d.get('지도일자',''))
+                        item=text(d.get('점검항목',''),500)
+                        note=text(d.get('안내내용',''),4000)
+                        teacher_id=text(d.get('지도교사아이디',''),50)
+                        status=d.get('처리상태','pending') or 'pending'
+                        if status not in ('pending','review','done'): raise Problem('처리상태는 pending, review, done 중 하나여야 합니다.')
+                        student=conn.execute("SELECT name FROM users WHERE id=? AND role='student'",(sid,)).fetchone()
+                        teacher=conn.execute("SELECT id,name,role FROM users WHERE id=?",(teacher_id,)).fetchone()
+                        if not student: raise Problem('학생을 찾을 수 없습니다.')
+                        if not conn.execute('SELECT 1 FROM items WHERE value=?',(item,)).fetchone(): raise Problem('등록되지 않은 점검 항목입니다.')
+                        if not teacher or teacher['role'] not in ('teacher','admin'): raise Problem('지도교사 아이디를 찾을 수 없습니다.')
+                        existing=conn.execute('SELECT * FROM records WHERE sid=? AND item=? AND teacher_id=? AND date=?',(sid,item,teacher_id,date)).fetchone()
+                        prepared.append(('record',dict(sid=sid,item=item,note=note,status=status,teacher_id=teacher_id,teacher=teacher['name'],date=date,existing=existing)))
+                    elif kind=='students':
                         udata={'role':'student','g':d.get('학년',''),'c':d.get('반',''),'n':d.get('번호',''),'name':d.get('이름',''),'home':d.get('담임교사','')}
                         uid=student_id(udata['g'],udata['c'],udata['n'])
                     else:
@@ -445,8 +460,21 @@ def create_app(data_dir=None):
                 except Problem as ex: errors.append({'row':number,'error':ex.message})
             if errors: return jsonify(error='오류 행을 수정해 다시 업로드하세요. 이번 파일은 저장되지 않았습니다.',errors=errors),400
             created=updated=0
-            for u,old in prepared:
-                write_user(conn,u);conn.execute('DELETE FROM sessions WHERE uid=?',(u['id'],));created+=not old;updated+=old
+            for data,old in prepared:
+                if kind=='records':
+                    record=data
+                    if record['existing']:
+                        before=dict(record['existing'])
+                        conn.execute('UPDATE records SET note=?,status=?,teacher=?,updated_at=?,version=version+1 WHERE id=?',(record['note'],record['status'],record['teacher'],stamp(),record['existing']['id']))
+                        audit(conn,'record_excel_update',record['existing']['id'],before=before,after=dict(conn.execute('SELECT * FROM records WHERE id=?',(record['existing']['id'],)).fetchone()))
+                        updated+=1
+                    else:
+                        rid=conn.execute('INSERT INTO records(sid,item,note,status,teacher_id,teacher,date,updated_at) VALUES(?,?,?,?,?,?,?,?)',(record['sid'],record['item'],record['note'],record['status'],record['teacher_id'],record['teacher'],record['date'],stamp())).lastrowid
+                        audit(conn,'record_excel_import',rid,after=dict(conn.execute('SELECT * FROM records WHERE id=?',(rid,)).fetchone()))
+                        created+=1
+                else:
+                    u=data
+                    write_user(conn,u);conn.execute('DELETE FROM sessions WHERE uid=?',(u['id'],));created+=not old;updated+=old
             audit(conn,'excel_import',after={'kind':kind,'created':created,'updated':updated})
         return jsonify(message=f'신규 {created}건 / 수정 {updated}건',created=created,updated=updated)
 
