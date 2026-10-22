@@ -112,7 +112,7 @@ class ServerTests(unittest.TestCase):
   r=self.upload('import/students',raw,'students.xlsx');self.assertEqual(r.status_code,200,r.json);self.assertEqual(r.json['created'],1);self.assertEqual(r.json['updated'],1)
   self.client('2301','abcd');self.client('1101')
   rid=self.add_record(note='=HYPERLINK("evil")')
-  out=self.call(self.admin,'report.xlsx');self.assertEqual(out.status_code,200);wb=load_workbook(io.BytesIO(out.data));self.assertEqual(wb.active['H2'].data_type,'s');self.assertIn('HYPERLINK',wb.active['H2'].value)
+  out=self.call(self.admin,'report.xlsx');self.assertEqual(out.status_code,200);wb=load_workbook(io.BytesIO(out.data));self.assertEqual(wb.active['G2'].data_type,'s');self.assertIn('HYPERLINK',wb.active['G2'].value)
   self.assertEqual(self.call(self.admin,'template/teachers.xlsx').status_code,200)
  def test_teacher_excel_and_dynamic_classes(self):
   raw=self.workbook([['교사아이디','이름','역할','담당학년','담당반','초기비밀번호'],['t3','새교사','교사',2,10,'abcd']])
