@@ -154,7 +154,7 @@ def create_app(data_dir=None):
         if path.startswith('api/'): raise Problem('페이지를 찾을 수 없습니다.',404)
         return send_from_directory(ROOT/'static',path)
     @app.get(PREFIX+'/api/health')
-    def health(): return jsonify(ok=True,version='5.0.5')
+    def health(): return jsonify(ok=True,version='5.0.6')
     @app.get(PREFIX+'/api/session')
     def session():
         with db() as conn: initialized=bool(conn.execute('SELECT 1 FROM users').fetchone())
@@ -406,14 +406,18 @@ def create_app(data_dir=None):
     @app.get(PREFIX+'/api/template/<kind>.xlsx')
     @auth('admin')
     def template(kind):
-        if kind=='students':
-            data=[['학년','반','번호','이름','담임교사','초기비밀번호'],[1,1,1,'김하늘','김은혜','1234']]
-        elif kind=='teachers':
-            data=[['교사아이디','이름','역할','담당학년','담당반','초기비밀번호'],['t101','김은혜','teacher',1,1,'1234']]
-        elif kind=='records':
-            data=[['학년','반','번호','지도일자','점검항목','안내내용','지도교사아이디','처리상태'],[1,1,1,today(),'명찰 미착용','명찰을 착용해 주세요.','t100','pending']]
-        else:
-            raise Problem('양식을 확인하세요.',404)
+        kind = {
+            'student': 'students',
+            'students.xlsx': 'students',
+            'teacher': 'teachers',
+            'teachers.xlsx': 'teachers',
+            'record': 'records',
+            'records.xlsx': 'records'
+        }.get(kind, kind)
+        if kind=='students': data=[['학년','반','번호','이름','담임교사','초기비밀번호'],[1,1,1,'김하늘','김은혜','1234']]
+        elif kind=='teachers': data=[['교사아이디','이름','역할','담당학년','담당반','초기비밀번호'],['t101','김은혜','teacher',1,1,'1234']]
+        elif kind=='records': data=[['학년','반','번호','지도일자','점검항목','안내내용','지도교사아이디','처리상태'],[1,1,1,today(),'명찰 미착용','명찰을 착용해 주세요.','t100','pending']]
+        else: raise Problem('양식을 확인하세요.',404)
         return xlsx(data,'단정체크_'+kind+'_양식.xlsx')
     @app.post(PREFIX+'/api/import/<kind>')
     @auth('admin')
