@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parent
 BASE = Path(sys.executable).resolve().parent if getattr(sys, 'frozen', False) else ROOT
 KST = timezone(timedelta(hours=9))
 PREFIX = '/danjeong'
+VERSION = '5.0.7'
 DEFAULT_ITEMS = ['명찰 미착용', '실내화 미착용', '교복 상의 규정 미준수']
 DEFAULT_RULES = ['학교 지정 교복과 명찰을 단정하게 착용합니다.', '교내에서는 지정 실내화를 착용합니다.']
 SCHEMA = '''
@@ -37,7 +38,7 @@ class Problem(Exception):
     def __init__(self, message, status=400): self.message,self.status=message,status
 
 def text(value, maxlen=1000):
-    if not isinstance(value, (str,int)): raise Problem('입력 형식을 확인하세요.')
+    if isinstance(value,bool) or not isinstance(value,(str,int)): raise Problem('입력 형식을 확인하세요.')
     value=str(value).strip()
     if len(value)>maxlen: raise Problem('입력 내용이 너무 깁니다.')
     return value
@@ -154,7 +155,7 @@ def create_app(data_dir=None):
         if path.startswith('api/'): raise Problem('페이지를 찾을 수 없습니다.',404)
         return send_from_directory(ROOT/'static',path)
     @app.get(PREFIX+'/api/health')
-    def health(): return jsonify(ok=True,version='5.0.7')
+    def health(): return jsonify(ok=True,version=VERSION)
     @app.get(PREFIX+'/api/session')
     def session():
         with db() as conn: initialized=bool(conn.execute('SELECT 1 FROM users').fetchone())
@@ -336,6 +337,7 @@ def create_app(data_dir=None):
                 if g.user['role']=='teacher' and r['teacher_id']!=g.user['id']: raise Problem('본인이 등록한 기록만 수정할 수 있습니다.',403)
                 item=text(d.get('item',r['item']),500);note=text(d.get('note',r['note']),4000);date=valid_date(d.get('date',r['date']));status=d.get('status',r['status'])
                 if not item or status not in ('pending','review','done'): raise Problem('점검 항목·처리 상태를 확인하세요.')
+                if item!=r['item'] and not conn.execute('SELECT 1 FROM items WHERE value=?',(item,)).fetchone(): raise Problem('등록된 점검 항목을 선택하세요.')
             conn.execute('UPDATE records SET item=?,note=?,date=?,status=?,updated_at=?,version=version+1 WHERE id=?',(item,note,date,status,stamp(),rid))
             audit(conn,'student_complete' if g.user['role']=='student' else 'record_update',rid,dict(r),dict(conn.execute('SELECT * FROM records WHERE id=?',(rid,)).fetchone()))
         return jsonify(message='지도 내역을 저장했습니다.')
@@ -363,12 +365,19 @@ def create_app(data_dir=None):
         return [dict(r) for r in conn.execute(query+' ORDER BY r.date DESC,r.id DESC',args)]
     def report_data(conn):
         rows=filtered(conn)
-        sort_key=request.args.get('sort','sid')
-        direction=request.args.get('dir','asc')
-        if sort_key not in ('sid','name','count'): sort_key='sid'
-        reverse=direction=='desc'
+        sort_key=request.args.get('sort','sid'); direction=request.args.get('dir','asc')
+        allowed=('sid','name','g','c','n','date','item','teacher','status','count')
+        if sort_key not in allowed: sort_key='sid'
+        reverse=direction=='desc'; status_order={'pending':1,'review':2,'done':3}
+        def value(row):
+            raw=row.get(sort_key,'')
+            if sort_key in ('g','c','n','count'):
+                try: return (0,int(raw))
+                except (TypeError,ValueError): return (1,str(raw))
+            if sort_key=='status': return (0,status_order.get(raw,99))
+            return (0,str(raw))
         if request.args.get('repeat')!='1':
-            return sorted(rows,key=lambda x: str(x.get(sort_key,'')),reverse=reverse)
+            return sorted(rows,key=lambda x:(value(x),x.get('sid',''),x.get('id',0)),reverse=reverse)
         try: threshold=int(request.args.get('threshold','5'))
         except ValueError: raise Problem('기준 횟수를 확인하세요.')
         if not 1<=threshold<=100000: raise Problem('기준 횟수는 1 이상으로 입력하세요.')
@@ -377,8 +386,7 @@ def create_app(data_dir=None):
             if r['sid'] not in grouped: grouped[r['sid']]={**r,'count':0}
             grouped[r['sid']]['count']+=1
         result=[r for r in grouped.values() if r['count']>=threshold]
-        if sort_key=='count': return sorted(result,key=lambda x:(x['count'],x['sid']),reverse=reverse)
-        return sorted(result,key=lambda x:str(x.get(sort_key,'')),reverse=reverse)
+        return sorted(result,key=lambda x:(value(x),x.get('sid','')),reverse=reverse)
     @app.get(PREFIX+'/api/report')
     @auth('admin')
     def report_api():
@@ -399,7 +407,7 @@ def create_app(data_dir=None):
         with db() as conn: rows=report_data(conn)
         if request.args.get('repeat')=='1':
             data=[['학년','반','번호','이름','담임교사','지도횟수','최근지도일','최근지도항목']]+[[r[k] for k in ('g','c','n','name','home','count','date','item')] for r in rows]
-        else: data=[['학년','반','번호','이름','일자','점검항목','안내내용','지도교사','처리상태']]+[[r[k] for k in ('g','c','n','name','date','item','note','teacher','status')] for r in rows]
+        else: data=[['학년','반','번호','이름','일자','점검항목','세부사항 및 전달사항','지도교사','처리상태']]+[[r[k] for k in ('g','c','n','name','date','item','note','teacher','status')] for r in rows]
         return xlsx(data,'단정체크_보고서.xlsx')
     @app.get(PREFIX+'/api/template/<kind>.xlsx')
     @auth('admin')
@@ -410,7 +418,7 @@ def create_app(data_dir=None):
         elif kind=='teachers':
             data=[['교사아이디','이름','역할','담당학년','담당반','초기비밀번호'],['t101','김은혜','teacher',1,1,'1234']]
         elif kind=='records':
-            data=[['학년','반','번호','지도일자','점검항목','안내내용','지도교사아이디','처리상태'],[1,1,1,today(),'명찰 미착용','명찰을 착용해 주세요.','t100','pending']]
+            data=[['학년','반','번호','지도일자','점검항목','세부사항 및 전달사항','지도교사아이디','처리상태'],[1,1,1,today(),'명찰 미착용','명찰을 착용해 주세요.','t100','pending']]
         else:
             raise Problem('양식을 확인하세요.',404)
         return xlsx(data,'단정체크_'+kind+'_양식.xlsx')
@@ -438,6 +446,11 @@ def create_app(data_dir=None):
         except Problem: raise
         except Exception: raise Problem('Excel 파일 형식을 확인하세요.')
         headings=[str(x or '').strip() for x in matrix[0]]
+        required={'students':{'학년','반','번호','이름'},'teachers':{'교사아이디','이름'},'records':{'학년','반','번호','지도일자','점검항목','지도교사아이디','처리상태'}}[kind]
+        if len([x for x in headings if x])!=len(set(x for x in headings if x)): raise Problem('Excel 제목 행에 중복된 열이 있습니다.')
+        missing=sorted(required-set(headings))
+        if kind=='records' and not ({'세부사항 및 전달사항','안내내용'} & set(headings)): missing.append('세부사항 및 전달사항')
+        if missing: raise Problem('Excel 제목 행에 필요한 열이 없습니다: '+', '.join(missing))
         errors=[];prepared=[];seen=set()
         with db() as conn:
             for number,row in enumerate(matrix[1:],2):
@@ -448,7 +461,7 @@ def create_app(data_dir=None):
                         sid=student_id(d.get('학년',''),d.get('반',''),d.get('번호',''))
                         date=valid_date(d.get('지도일자',''))
                         item=text(d.get('점검항목',''),500)
-                        note=text(d.get('안내내용',''),4000)
+                        note=text(d.get('세부사항 및 전달사항',d.get('안내내용','')),4000)
                         teacher_id=text(d.get('지도교사아이디',''),50)
                         status=d.get('처리상태','pending') or 'pending'
                         if status not in ('pending','review','done'): raise Problem('처리상태는 pending, review, done 중 하나여야 합니다.')
