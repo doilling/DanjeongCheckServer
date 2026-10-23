@@ -365,10 +365,12 @@ def create_app(data_dir=None):
         return [dict(r) for r in conn.execute(query+' ORDER BY r.date DESC,r.id DESC',args)]
     def report_data(conn):
         rows=filtered(conn)
-        sort_key=request.args.get('sort','sid'); direction=request.args.get('dir','asc')
+        sort_key=request.args.get('sort','sid')
+        direction=request.args.get('dir','asc')
         allowed=('sid','name','g','c','n','date','item','teacher','status','count')
         if sort_key not in allowed: sort_key='sid'
-        reverse=direction=='desc'; status_order={'pending':1,'review':2,'done':3}
+        reverse=direction=='desc'
+        status_order={'pending':1,'review':2,'done':3}
         def value(row):
             raw=row.get(sort_key,'')
             if sort_key in ('g','c','n','count'):
@@ -446,7 +448,11 @@ def create_app(data_dir=None):
         except Problem: raise
         except Exception: raise Problem('Excel 파일 형식을 확인하세요.')
         headings=[str(x or '').strip() for x in matrix[0]]
-        required={'students':{'학년','반','번호','이름'},'teachers':{'교사아이디','이름'},'records':{'학년','반','번호','지도일자','점검항목','지도교사아이디','처리상태'}}[kind]
+        required={
+            'students':{'학년','반','번호','이름'},
+            'teachers':{'교사아이디','이름'},
+            'records':{'학년','반','번호','지도일자','점검항목','지도교사아이디','처리상태'}
+        }[kind]
         if len([x for x in headings if x])!=len(set(x for x in headings if x)): raise Problem('Excel 제목 행에 중복된 열이 있습니다.')
         missing=sorted(required-set(headings))
         if kind=='records' and not ({'세부사항 및 전달사항','안내내용'} & set(headings)): missing.append('세부사항 및 전달사항')
