@@ -358,6 +358,8 @@ def create_app(data_dir=None):
         for key in ('g','c'):
             val=request.args.get(key)
             if val: clauses.append('u.'+key+'=?');args.append(val)
+        sid=request.args.get('sid','').strip()
+        if sid: clauses.append('r.sid=?');args.append(sid)
         term=request.args.get('term','').strip()
         if term: clauses.append('(u.id LIKE ? OR u.name LIKE ?)');args.extend(['%'+term+'%']*2)
         query='SELECT r.*,u.name,u.g,u.c,u.n,u.home FROM records r JOIN users u ON u.id=r.sid'
@@ -367,13 +369,13 @@ def create_app(data_dir=None):
         rows=filtered(conn)
         sort_key=request.args.get('sort','sid')
         direction=request.args.get('dir','asc')
-        allowed=('sid','name','g','c','n','date','item','teacher','status','count')
+        allowed=('sid','name','g','c','n','date','latest_date','item','teacher','status','count','day_count','streak')
         if sort_key not in allowed: sort_key='sid'
         reverse=direction=='desc'
         status_order={'pending':1,'review':2,'done':3}
         def value(row):
             raw=row.get(sort_key,'')
-            if sort_key in ('g','c','n','count'):
+            if sort_key in ('g','c','n','count','day_count','streak'):
                 try: return (0,int(raw))
                 except (TypeError,ValueError): return (1,str(raw))
             if sort_key=='status': return (0,status_order.get(raw,99))
@@ -383,11 +385,24 @@ def create_app(data_dir=None):
         try: threshold=int(request.args.get('threshold','5'))
         except ValueError: raise Problem('기준 횟수를 확인하세요.')
         if not 1<=threshold<=100000: raise Problem('기준 횟수는 1 이상으로 입력하세요.')
+        inspection_dates=sorted({r['date'] for r in rows},reverse=True)
         grouped={}
+        student_dates={}
         for r in rows:
             if r['sid'] not in grouped: grouped[r['sid']]={**r,'count':0}
             grouped[r['sid']]['count']+=1
-        result=[r for r in grouped.values() if r['count']>=threshold]
+            student_dates.setdefault(r['sid'],set()).add(r['date'])
+        result=[]
+        for sid,row in grouped.items():
+            dates=student_dates[sid]
+            row['day_count']=len(dates)
+            row['latest_date']=max(dates)
+            streak=0
+            for inspection_date in inspection_dates:
+                if inspection_date in dates: streak+=1
+                else: break
+            row['streak']=streak
+            if row['count']>=threshold: result.append(row)
         return sorted(result,key=lambda x:(value(x),x.get('sid','')),reverse=reverse)
     @app.get(PREFIX+'/api/report')
     @auth('admin')
@@ -408,7 +423,7 @@ def create_app(data_dir=None):
     def export_report():
         with db() as conn: rows=report_data(conn)
         if request.args.get('repeat')=='1':
-            data=[['학년','반','번호','이름','담임교사','지도횟수','최근지도일','최근지도항목']]+[[r[k] for k in ('g','c','n','name','home','count','date','item')] for r in rows]
+            data=[['학년','반','번호','이름','담임교사','기간 내 지도 건수','점검일 수','연속 점검 횟수','최근 지도일','최근 지도항목']]+[[r['g'],r['c'],r['n'],r['name'],r['home'],r['count'],r['day_count'],r['streak'],r['latest_date'],r['item']] for r in rows]
         else: data=[['학년','반','번호','이름','일자','점검항목','세부사항 및 전달사항','지도교사','처리상태']]+[[r[k] for k in ('g','c','n','name','date','item','note','teacher','status')] for r in rows]
         return xlsx(data,'단정체크_보고서.xlsx')
     @app.get(PREFIX+'/api/template/<kind>.xlsx')
@@ -448,11 +463,7 @@ def create_app(data_dir=None):
         except Problem: raise
         except Exception: raise Problem('Excel 파일 형식을 확인하세요.')
         headings=[str(x or '').strip() for x in matrix[0]]
-        required={
-            'students':{'학년','반','번호','이름'},
-            'teachers':{'교사아이디','이름'},
-            'records':{'학년','반','번호','지도일자','점검항목','지도교사아이디','처리상태'}
-        }[kind]
+        required={'students':{'학년','반','번호','이름'},'teachers':{'교사아이디','이름'},'records':{'학년','반','번호','지도일자','점검항목','지도교사아이디','처리상태'}}[kind]
         if len([x for x in headings if x])!=len(set(x for x in headings if x)): raise Problem('Excel 제목 행에 중복된 열이 있습니다.')
         missing=sorted(required-set(headings))
         if kind=='records' and not ({'세부사항 및 전달사항','안내내용'} & set(headings)): missing.append('세부사항 및 전달사항')

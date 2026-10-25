@@ -162,4 +162,19 @@ class ServerTests(unittest.TestCase):
   self.assertEqual(self.call(self.admin,'year-reset',{'password':'abcd'}).status_code,200)
   data=self.call(self.admin,'state').json;self.assertEqual([u['id'] for u in data['users']],['boss']);self.assertEqual(data['records'],[])
 
+
+ def test_repeat_report_consecutive_rounds_and_exact_student_filter(self):
+  for sid,date,item in [('1101','2026-10-01','명찰 미착용'),('1101','2026-10-08','명찰 미착용'),('1101','2026-10-15','명찰 미착용'),('1201','2026-10-01','명찰 미착용'),('1201','2026-10-15','명찰 미착용')]:
+   r=self.call(self.admin,'records',{'sid':sid,'item':item,'note':'세부사항'});self.assertEqual(r.status_code,201,r.json)
+   rid=self.call(self.admin,'state').json['records'][0]['id']
+   r=self.call(self.admin,f'records/{rid}',{'date':date,'expectedVersion':1},'PUT');self.assertEqual(r.status_code,200,r.json)
+  rows=self.call(self.admin,'report?from=2026-10-01&to=2026-10-15&repeat=1&threshold=1&sort=sid').json['rows']
+  by_id={r['sid']:r for r in rows}
+  self.assertEqual((by_id['1101']['count'],by_id['1101']['day_count'],by_id['1101']['streak'],by_id['1101']['latest_date']),(3,3,3,'2026-10-15'))
+  self.assertEqual((by_id['1201']['count'],by_id['1201']['day_count'],by_id['1201']['streak']),(2,2,1))
+  detail=self.call(self.admin,'report?from=2026-10-01&to=2026-10-15&sid=1101&sort=date&dir=desc').json['rows']
+  self.assertEqual(len(detail),3);self.assertTrue(all(r['sid']=='1101' for r in detail))
+  out=self.call(self.admin,'report.xlsx?from=2026-10-01&to=2026-10-15&repeat=1&threshold=1')
+  wb=load_workbook(io.BytesIO(out.data));self.assertEqual(wb.active['H1'].value,'연속 점검 횟수')
+
 if __name__=='__main__':unittest.main()
