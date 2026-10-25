@@ -177,4 +177,10 @@ class ServerTests(unittest.TestCase):
   out=self.call(self.admin,'report.xlsx?from=2026-10-01&to=2026-10-15&repeat=1&threshold=1')
   wb=load_workbook(io.BytesIO(out.data));self.assertEqual(wb.active['H1'].value,'연속 점검 횟수')
 
+
+ def test_report_ui_does_not_require_missing_student_select(self):
+  appjs=(Path(__file__).resolve().parents[1]/'static'/'app.js').read_text(encoding='utf-8')
+  self.assertIn("sid:q('#fs')?.value||''",appjs)
+  self.assertNotIn("sid:q('#fs').value",appjs)
+
 if __name__=='__main__':unittest.main()
