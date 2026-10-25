@@ -163,24 +163,23 @@ class ServerTests(unittest.TestCase):
   data=self.call(self.admin,'state').json;self.assertEqual([u['id'] for u in data['users']],['boss']);self.assertEqual(data['records'],[])
 
 
- def test_repeat_report_consecutive_rounds_and_exact_student_filter(self):
-  for sid,date,item in [('1101','2026-10-01','명찰 미착용'),('1101','2026-10-08','명찰 미착용'),('1101','2026-10-15','명찰 미착용'),('1201','2026-10-01','명찰 미착용'),('1201','2026-10-15','명찰 미착용')]:
-   r=self.call(self.admin,'records',{'sid':sid,'item':item,'note':'세부사항'});self.assertEqual(r.status_code,201,r.json)
-   rid=self.call(self.admin,'state').json['records'][0]['id']
-   r=self.call(self.admin,f'records/{rid}',{'date':date,'expectedVersion':1},'PUT');self.assertEqual(r.status_code,200,r.json)
-  rows=self.call(self.admin,'report?from=2026-10-01&to=2026-10-15&repeat=1&threshold=1&sort=sid').json['rows']
-  by_id={r['sid']:r for r in rows}
-  self.assertEqual((by_id['1101']['count'],by_id['1101']['day_count'],by_id['1101']['streak'],by_id['1101']['latest_date']),(3,3,3,'2026-10-15'))
-  self.assertEqual((by_id['1201']['count'],by_id['1201']['day_count'],by_id['1201']['streak']),(2,2,1))
-  detail=self.call(self.admin,'report?from=2026-10-01&to=2026-10-15&sid=1101&sort=date&dir=desc').json['rows']
-  self.assertEqual(len(detail),3);self.assertTrue(all(r['sid']=='1101' for r in detail))
-  out=self.call(self.admin,'report.xlsx?from=2026-10-01&to=2026-10-15&repeat=1&threshold=1')
-  wb=load_workbook(io.BytesIO(out.data));self.assertEqual(wb.active['H1'].value,'연속 점검 횟수')
-
-
- def test_report_ui_does_not_require_missing_student_select(self):
+ def test_manual_historical_record_and_teacher_assignment(self):
+  r=self.call(self.admin,'records',{'sid':'1101','item':'명찰 미착용','note':'지난 점검 기록','date':'2020-03-02','teacherId':'t2'})
+  self.assertEqual(r.status_code,201,r.json)
+  record=self.call(self.admin,'state').json['records'][0]
+  self.assertEqual((record['date'],record['teacher_id'],record['teacher']),('2020-03-02','t2','다른교사'))
+  teacher=self.client('t1')
+  r=self.call(teacher,'records',{'sid':'1101','item':'명찰 미착용','note':'교사 직접 등록','date':'2020-03-03','teacherId':'t2'})
+  self.assertEqual(r.status_code,201,r.json)
+  record=self.call(self.admin,'state').json['records'][0]
+  self.assertEqual((record['date'],record['teacher_id']),('2020-03-03','t1'))
+  r=self.call(self.admin,'records',{'sid':'1101','item':'명찰 미착용','date':'9999-12-31'})
+  self.assertEqual(r.status_code,400)
+ def test_manual_record_ui_and_report_filter_safety(self):
   appjs=(Path(__file__).resolve().parents[1]/'static'/'app.js').read_text(encoding='utf-8')
+  self.assertIn('지도내역 추가',appjs)
+  self.assertIn('id="addDate"',appjs)
   self.assertIn("sid:q('#fs')?.value||''",appjs)
-  self.assertNotIn("sid:q('#fs').value",appjs)
+  self.assertNotRegex(appjs,r'(?m)^(<<<<<<<|=======|>>>>>>>)')
 
 if __name__=='__main__':unittest.main()

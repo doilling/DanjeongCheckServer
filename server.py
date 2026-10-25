@@ -306,10 +306,18 @@ def create_app(data_dir=None):
     @auth('admin','teacher')
     def add_record():
         d=body();sid=text(d.get('sid',''),50);item=text(d.get('item',''),500);note=text(d.get('note',''),4000)
+        record_date=valid_date(d.get('date',today()))
+        if record_date>today(): raise Problem('미래 날짜의 지도 내역은 등록할 수 없습니다.')
         with db() as conn:
             if not conn.execute("SELECT 1 FROM users WHERE id=? AND role='student'",(sid,)).fetchone(): raise Problem('등록된 학생을 선택하세요.')
             if not conn.execute('SELECT 1 FROM items WHERE value=?',(item,)).fetchone(): raise Problem('등록된 점검 항목을 선택하세요.')
-            rid=conn.execute('INSERT INTO records(sid,item,note,status,teacher_id,teacher,date,updated_at) VALUES(?,?,?,?,?,?,?,?)',(sid,item,note,'pending',g.user['id'],g.user['name'],today(),stamp())).lastrowid
+            teacher_id=g.user['id'];teacher_name=g.user['name']
+            requested=text(d.get('teacherId',''),50)
+            if requested and g.user['role']=='admin':
+                teacher_row=conn.execute("SELECT id,name FROM users WHERE id=? AND role IN ('teacher','admin')",(requested,)).fetchone()
+                if not teacher_row: raise Problem('등록된 지도교사를 선택하세요.')
+                teacher_id=teacher_row['id'];teacher_name=teacher_row['name']
+            rid=conn.execute('INSERT INTO records(sid,item,note,status,teacher_id,teacher,date,updated_at) VALUES(?,?,?,?,?,?,?,?)',(sid,item,note,'pending',teacher_id,teacher_name,record_date,stamp())).lastrowid
             audit(conn,'record_create',rid,after=dict(conn.execute('SELECT * FROM records WHERE id=?',(rid,)).fetchone()))
         return jsonify(message='지도 내역을 등록했습니다.'),201
     def get_record(conn,rid):
@@ -386,18 +394,14 @@ def create_app(data_dir=None):
         except ValueError: raise Problem('기준 횟수를 확인하세요.')
         if not 1<=threshold<=100000: raise Problem('기준 횟수는 1 이상으로 입력하세요.')
         inspection_dates=sorted({r['date'] for r in rows},reverse=True)
-        grouped={}
-        student_dates={}
+        grouped={};student_dates={}
         for r in rows:
             if r['sid'] not in grouped: grouped[r['sid']]={**r,'count':0}
             grouped[r['sid']]['count']+=1
             student_dates.setdefault(r['sid'],set()).add(r['date'])
         result=[]
         for sid,row in grouped.items():
-            dates=student_dates[sid]
-            row['day_count']=len(dates)
-            row['latest_date']=max(dates)
-            streak=0
+            dates=student_dates[sid];row['day_count']=len(dates);row['latest_date']=max(dates);streak=0
             for inspection_date in inspection_dates:
                 if inspection_date in dates: streak+=1
                 else: break
