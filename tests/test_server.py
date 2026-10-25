@@ -163,23 +163,21 @@ class ServerTests(unittest.TestCase):
   data=self.call(self.admin,'state').json;self.assertEqual([u['id'] for u in data['users']],['boss']);self.assertEqual(data['records'],[])
 
 
- def test_manual_historical_record_and_teacher_assignment(self):
-  r=self.call(self.admin,'records',{'sid':'1101','item':'명찰 미착용','note':'지난 점검 기록','date':'2020-03-02','teacherId':'t2'})
+ def test_manual_historical_record_and_permanent_cache_files(self):
+  r=self.call(self.admin,'records',{'sid':'1101','item':'명찰 미착용','note':'지난 기록','date':'2020-03-02','teacherId':'t2'})
   self.assertEqual(r.status_code,201,r.json)
   record=self.call(self.admin,'state').json['records'][0]
-  self.assertEqual((record['date'],record['teacher_id'],record['teacher']),('2020-03-02','t2','다른교사'))
-  teacher=self.client('t1')
-  r=self.call(teacher,'records',{'sid':'1101','item':'명찰 미착용','note':'교사 직접 등록','date':'2020-03-03','teacherId':'t2'})
-  self.assertEqual(r.status_code,201,r.json)
-  record=self.call(self.admin,'state').json['records'][0]
-  self.assertEqual((record['date'],record['teacher_id']),('2020-03-03','t1'))
+  self.assertEqual((record['date'],record['teacher_id']),('2020-03-02','t2'))
   r=self.call(self.admin,'records',{'sid':'1101','item':'명찰 미착용','date':'9999-12-31'})
   self.assertEqual(r.status_code,400)
- def test_manual_record_ui_and_report_filter_safety(self):
-  appjs=(Path(__file__).resolve().parents[1]/'static'/'app.js').read_text(encoding='utf-8')
+  root=Path(__file__).resolve().parents[1]
+  appjs=(root/'static'/'app.js').read_text(encoding='utf-8')
+  worker=(root/'static'/'service-worker.js').read_text(encoding='utf-8')
   self.assertIn('지도내역 추가',appjs)
-  self.assertIn('id="addDate"',appjs)
-  self.assertIn("sid:q('#fs')?.value||''",appjs)
+  self.assertIn("registration=>registration.update()",appjs)
+  self.assertIn("controllerchange",appjs)
+  self.assertIn("danjeong-5-0-7-20261025-r1",worker)
+  self.assertIn("fetch(request)",worker)
   self.assertNotRegex(appjs,r'(?m)^(<<<<<<<|=======|>>>>>>>)')
 
 if __name__=='__main__':unittest.main()

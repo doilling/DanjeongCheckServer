@@ -1,0 +1,10 @@
+# C:\webserver\Caddyfile 의 사이트 블록 안에 추가
+@danjeongFresh path /danjeong/ /danjeong/app.js /danjeong/styles.css /danjeong/service-worker.js
+header @danjeongFresh {
+    Cache-Control "no-cache, no-store, must-revalidate"
+    Pragma "no-cache"
+    Expires "0"
+}
+
+redir /danjeong /danjeong/ 308
+reverse_proxy /danjeong/* 127.0.0.1:8787

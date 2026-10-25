@@ -89,7 +89,11 @@ function backupPage(host){host.innerHTML='<h3>전체 자료 백업</h3><p>계정
 async function render(page='home'){await refresh();if(S.role==='student'&&!['home','records','password'].includes(page))page='home';if(S.role==='teacher'&&['manage','report'].includes(page))page='home';({home,check,records,manage,report,reset,password:passwordPage}[page]||home)();}
 async function start(){try{const r=await api('session');S=r.user;csrf=r.csrf;if(!r.initialized)setup();else if(S)await render('home');else login();}catch(err){app.innerHTML='<main class="login"><section class="card"><h2>서버 연결 확인</h2><p>'+e(err.message)+'</p><button class="btn primary" id="retry">다시 시도</button></section></main>';bind('#retry','click',start);}}
 window.addEventListener('unhandledrejection',ev=>{toast(ev.reason?.message||'처리에 실패했습니다.');ev.preventDefault();});
-if('serviceWorker' in navigator)navigator.serviceWorker.register('/danjeong/service-worker.js',{scope:'/danjeong/'}).catch(()=>{});
+if('serviceWorker' in navigator){
+ let refreshing=false;
+ navigator.serviceWorker.register('/danjeong/service-worker.js',{scope:'/danjeong/'}).then(registration=>registration.update()).catch(()=>{});
+ navigator.serviceWorker.addEventListener('controllerchange',()=>{if(refreshing)return;refreshing=true;window.location.reload();});
+}
 start();
 })();
 
