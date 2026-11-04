@@ -150,6 +150,21 @@ def create_app(data_dir=None):
         return redirect(PREFIX+'/')
     @app.get(PREFIX+'/')
     def index(): return send_from_directory(ROOT/'static','index.html')
+    @app.get(PREFIX+'/manifest.webmanifest')
+    def pwa_manifest():
+        return send_from_directory(ROOT/'static','manifest.webmanifest',mimetype='application/manifest+json')
+    def service_worker_file(filename):
+        response=send_from_directory(ROOT/'static',filename,mimetype='text/javascript')
+        response.headers['Service-Worker-Allowed']=PREFIX+'/'
+        return response
+    @app.get(PREFIX+'/sw.js')
+    def pwa_service_worker(): return service_worker_file('sw.js')
+    @app.get(PREFIX+'/service-worker.js')
+    def legacy_pwa_service_worker(): return service_worker_file('service-worker.js')
+    @app.get(PREFIX+'/icon-192.png')
+    def pwa_icon_192(): return send_from_directory(ROOT/'static','icon-192.png',mimetype='image/png')
+    @app.get(PREFIX+'/icon-512.png')
+    def pwa_icon_512(): return send_from_directory(ROOT/'static','icon-512.png',mimetype='image/png')
     @app.get(PREFIX+'/<path:path>')
     def static(path):
         if path.startswith('api/'): raise Problem('페이지를 찾을 수 없습니다.',404)
@@ -358,7 +373,7 @@ def create_app(data_dir=None):
             audit(conn,'record_delete',rid,before=dict(r));conn.execute('DELETE FROM records WHERE id=?',(rid,))
         return jsonify(message='지도 내역을 삭제했습니다.')
 
-    def filtered(conn):
+    def filtered(conn,include_student_filter=True):
         clauses=[];args=[]
         for key,column in [('from','r.date'),('to','r.date')]:
             val=request.args.get(key)
@@ -366,10 +381,11 @@ def create_app(data_dir=None):
         for key in ('g','c'):
             val=request.args.get(key)
             if val: clauses.append('u.'+key+'=?');args.append(val)
-        sid=request.args.get('sid','').strip()
-        if sid: clauses.append('r.sid=?');args.append(sid)
-        term=request.args.get('term','').strip()
-        if term: clauses.append('(u.id LIKE ? OR u.name LIKE ?)');args.extend(['%'+term+'%']*2)
+        if include_student_filter:
+            sid=request.args.get('sid','').strip()
+            if sid: clauses.append('r.sid=?');args.append(sid)
+            term=request.args.get('term','').strip()
+            if term: clauses.append('(u.id LIKE ? OR u.name LIKE ?)');args.extend(['%'+term+'%']*2)
         query='SELECT r.*,u.name,u.g,u.c,u.n,u.home FROM records r JOIN users u ON u.id=r.sid'
         if clauses: query+=' WHERE '+' AND '.join(clauses)
         return [dict(r) for r in conn.execute(query+' ORDER BY r.date DESC,r.id DESC',args)]
@@ -393,7 +409,9 @@ def create_app(data_dir=None):
         try: threshold=int(request.args.get('threshold','5'))
         except ValueError: raise Problem('기준 횟수를 확인하세요.')
         if not 1<=threshold<=100000: raise Problem('기준 횟수는 1 이상으로 입력하세요.')
-        inspection_dates=sorted({r['date'] for r in rows},reverse=True)
+        # Student searches narrow the displayed rows, but the streak calendar
+        # still uses every inspection date in the selected period/class scope.
+        inspection_dates=sorted({r['date'] for r in filtered(conn,False)},reverse=True)
         grouped={};student_dates={}
         for r in rows:
             if r['sid'] not in grouped: grouped[r['sid']]={**r,'count':0}

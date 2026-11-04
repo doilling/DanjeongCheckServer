@@ -21,6 +21,12 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: '22'
+      - name: Validate JavaScript and PWA files
+        run: |
+          node --check static/app.js
+          node --check static/sw.js
+          node --check static/service-worker.js
+          python tests/validate_pwa.py
       - name: Install UI test dependencies
         run: npm ci
       - name: Test UI with central HTTP server
@@ -49,4 +55,9 @@ jobs:
             installer-output/DanjeongCheck-Setup-5.0.7.exe
             scripts/*.ps1
             README.md
+            PWA_SEPARATION_AND_REINSTALL.md
+            README_SERVER_CACHE_UPDATE.txt
+            Caddyfile_danjeong_cache_snippet.txt
+            VALIDATION_PWA_20261025.txt
+            WINDOWS_BUILD_REBUILD_REQUIRED.txt
           if-no-files-found: error

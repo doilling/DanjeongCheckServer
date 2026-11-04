@@ -1,0 +1,47 @@
+단정체크 5.0.7 PWA 분리판 검증 보고서
+작성일: 2026-10-25
+
+적용 내용
+- Manifest ID: /danjeong/danjeong-check-app
+- Manifest start_url/scope: /danjeong/
+- 서비스 워커: /danjeong/sw.js
+- 서비스 워커 scope: /danjeong/
+- 전용 아이콘: /danjeong/icon-192.png, /danjeong/icon-512.png
+- API 캐시 제외: /danjeong/api/
+- /danjeong/ 밖 요청 처리 제외
+- 기존 /danjeong/service-worker.js 마이그레이션 호환
+- Caddy reverse_proxy 설정 변경 없음
+- 운영 data/SQLite 미포함 및 설치 스크립트 삭제 동작 없음
+- 이전 반복 지도 검색 연속 횟수 보정 포함
+
+로컬 검증 결과
+- Python 서버 통합 테스트: 22 passed
+- ResourceWarning 엄격 검사: 통과
+- Python 구문 검사: 통과
+- Manifest JSON 파싱 및 필드 검사: 통과
+- PNG 서명 및 크기 검사: 192x192, 512x512 통과
+- PWA 경로·scope·API 캐시 제외 검사: 통과
+- Flask 라우트 및 Content-Type 검사: 통과
+- root /sw.js 미제공 검사: 통과
+- 기존 API/DB 기능 회귀 검사: 통과
+- Git 충돌 표시 검사: 없음
+- JavaScript 괄호/대괄호/중괄호 구조 검사: 통과
+- app.js, sw.js, service-worker.js Node 문법 검사를 GitHub Actions 필수 단계로 추가
+
+현재 환경 제한
+- 현재 실행 환경에는 Node.js가 없어 node --check와 npm run test:ui를 직접 실행하지 못했습니다.
+- Windows EXE와 Inno Setup 설치 프로그램은 GitHub Actions의 Windows 환경에서 최종 빌드해야 합니다.
+- Workflow는 node --check 3개 파일, PWA 검증, UI 테스트, 서버 테스트, EXE smoke test를 모두 통과해야 설치 파일을 발행합니다.
+
+운영 적용 전
+- C:\webserver\danjeong\data 전체 백업
+- GitHub 원격 저장소 Fetch/Pull
+- GitHub Actions 전체 성공 확인
+- PWA_SEPARATION_AND_REINSTALL.md에 따라 기존 설치 앱 및 잘못된 root 서비스 워커 정리
+- TRS 출석체크에도 /study/trs-attendance-app 및 /study/ scope 적용 확인
+
+최신 업로드 파일 재적용 확인
+- 재업로드된 DanjeongCheckServer507.zip SHA-256: bbcaa72427cf3f3c5112909f24e238791a781a9cbba89991959ef9087b965128
+- 재업로드된 Windows ZIP SHA-256: 17e17a5374aa87665181c7b469429f2308e5b40131295240e7229eaa14864b96
+- Windows ZIP의 README/PowerShell 스크립트는 소스 ZIP과 줄바꿈 외 내용이 동일함
+- Windows EXE/설치 프로그램은 PWA 분리 전 바이너리이므로 새 GitHub Actions 빌드 필요

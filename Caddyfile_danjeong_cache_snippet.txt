@@ -1,5 +1,8 @@
-# C:\webserver\Caddyfile 의 사이트 블록 안에 추가
-@danjeongFresh path /danjeong/ /danjeong/app.js /danjeong/styles.css /danjeong/service-worker.js
+# 선택 사항: Caddy에서 정적 파일 캐시 금지를 명시하려는 경우에만 사용합니다.
+# 단정체크 서버 자체가 no-store 헤더를 보내므로, 아래 헤더 블록 없이도 동작합니다.
+# 기존 reverse_proxy 경로는 변경하지 마세요.
+
+@danjeongFresh path /danjeong/ /danjeong/app.js /danjeong/styles.css /danjeong/manifest.webmanifest /danjeong/sw.js /danjeong/service-worker.js /danjeong/icon-192.png /danjeong/icon-512.png
 header @danjeongFresh {
     Cache-Control "no-cache, no-store, must-revalidate"
     Pragma "no-cache"

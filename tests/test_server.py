@@ -163,6 +163,41 @@ class ServerTests(unittest.TestCase):
   data=self.call(self.admin,'state').json;self.assertEqual([u['id'] for u in data['users']],['boss']);self.assertEqual(data['records'],[])
 
 
+ def test_repeat_streak_uses_full_inspection_dates_with_student_search(self):
+  for sid,date in [('1101','2020-03-03'),('1201','2020-03-02'),('1101','2020-03-01')]:
+   r=self.call(self.admin,'records',{'sid':sid,'item':'명찰 미착용','note':'연속 점검 검사','date':date})
+   self.assertEqual(r.status_code,201,r.json)
+  rows=self.call(self.admin,'report?term=김&from=2020-03-01&to=2020-03-03&repeat=1&threshold=1').json['rows']
+  self.assertEqual(len(rows),1)
+  self.assertEqual((rows[0]['count'],rows[0]['day_count'],rows[0]['streak']),(2,2,1))
+
+ def test_pwa_routes_are_isolated_and_have_correct_content_types(self):
+  client=self.app.test_client()
+  manifest_response=client.get('/danjeong/manifest.webmanifest')
+  self.assertEqual(manifest_response.status_code,200)
+  self.assertTrue(manifest_response.content_type.startswith('application/manifest+json'))
+  self.assertEqual(manifest_response.json['id'],'/danjeong/danjeong-check-app')
+  manifest_response.close()
+  worker=client.get('/danjeong/sw.js')
+  self.assertEqual(worker.status_code,200)
+  self.assertTrue(worker.content_type.startswith('text/javascript'))
+  self.assertEqual(worker.headers.get('Service-Worker-Allowed'),'/danjeong/')
+  self.assertIn(b"/danjeong/api/",worker.data)
+  worker.close()
+  legacy=client.get('/danjeong/service-worker.js')
+  self.assertEqual(legacy.status_code,200)
+  self.assertIn(b"/danjeong/sw.js",legacy.data)
+  legacy.close()
+  for size in ('192','512'):
+   icon=client.get('/danjeong/icon-'+size+'.png')
+   self.assertEqual(icon.status_code,200)
+   self.assertEqual(icon.content_type,'image/png')
+   self.assertEqual(icon.data[:8],b'\x89PNG\r\n\x1a\n')
+   icon.close()
+  root_worker=client.get('/sw.js')
+  self.assertEqual(root_worker.status_code,404)
+  root_worker.close()
+
  def test_manual_historical_record_and_permanent_cache_files(self):
   r=self.call(self.admin,'records',{'sid':'1101','item':'명찰 미착용','note':'지난 기록','date':'2020-03-02','teacherId':'t2'})
   self.assertEqual(r.status_code,201,r.json)
@@ -172,12 +207,26 @@ class ServerTests(unittest.TestCase):
   self.assertEqual(r.status_code,400)
   root=Path(__file__).resolve().parents[1]
   appjs=(root/'static'/'app.js').read_text(encoding='utf-8')
-  worker=(root/'static'/'service-worker.js').read_text(encoding='utf-8')
+  worker=(root/'static'/'sw.js').read_text(encoding='utf-8')
+  legacy_worker=(root/'static'/'service-worker.js').read_text(encoding='utf-8')
+  manifest=json.loads((root/'static'/'manifest.webmanifest').read_text(encoding='utf-8'))
+  index=(root/'static'/'index.html').read_text(encoding='utf-8')
   self.assertIn('지도내역 추가',appjs)
+  self.assertIn("register('/danjeong/sw.js'",appjs)
+  self.assertIn("scope:'/danjeong/'",appjs)
+  self.assertIn("updateViaCache:'none'",appjs)
   self.assertIn("registration=>registration.update()",appjs)
   self.assertIn("controllerchange",appjs)
-  self.assertIn("danjeong-5-0-7-20261025-r1",worker)
+  self.assertIn("danjeong-5-0-7-20261025-r2",worker)
+  self.assertIn("APP_PREFIX='/danjeong/'",worker)
+  self.assertIn("API_PREFIX='/danjeong/api/'",worker)
   self.assertIn("fetch(request)",worker)
+  self.assertIn("importScripts('/danjeong/sw.js')",legacy_worker)
+  self.assertEqual(manifest['id'],'/danjeong/danjeong-check-app')
+  self.assertEqual((manifest['start_url'],manifest['scope']),('/danjeong/','/danjeong/'))
+  self.assertEqual([icon['src'] for icon in manifest['icons']],['/danjeong/icon-192.png','/danjeong/icon-512.png'])
+  self.assertIn('rel="manifest" href="/danjeong/manifest.webmanifest"',index)
+  self.assertIn('rel="apple-touch-icon" href="/danjeong/icon-192.png"',index)
   self.assertNotRegex(appjs,r'(?m)^(<<<<<<<|=======|>>>>>>>)')
 
 if __name__=='__main__':unittest.main()

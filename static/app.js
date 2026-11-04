@@ -91,8 +91,10 @@ async function start(){try{const r=await api('session');S=r.user;csrf=r.csrf;if(
 window.addEventListener('unhandledrejection',ev=>{toast(ev.reason?.message||'처리에 실패했습니다.');ev.preventDefault();});
 if('serviceWorker' in navigator){
  let refreshing=false;
- navigator.serviceWorker.register('/danjeong/service-worker.js',{scope:'/danjeong/'}).then(registration=>registration.update()).catch(()=>{});
  navigator.serviceWorker.addEventListener('controllerchange',()=>{if(refreshing)return;refreshing=true;window.location.reload();});
+ window.addEventListener('load',()=>{
+  navigator.serviceWorker.register('/danjeong/sw.js',{scope:'/danjeong/',updateViaCache:'none'}).then(registration=>registration.update()).catch(()=>{});
+ });
 }
 start();
 })();
